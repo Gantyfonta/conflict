@@ -65,7 +65,7 @@
     </div>
 
     <!-- Main App View -->
-    <div id="app-view" class="hidden h-screen flex">
+    <div id="app-view" class="hidden h-screen flex relative">
       <!-- Server List -->
       <div id="server-list" class="w-20 bg-gray-900 p-3 flex flex-col items-center space-y-0 overflow-y-auto">
         <!-- Server icons rendered by JS -->
@@ -122,6 +122,14 @@
             </aside>
           </main>
         </div>
+      </div>
+
+      <!-- App-wide Error Overlay -->
+      <div id="app-error-overlay" class="hidden absolute inset-0 bg-gray-900/90 z-50 items-center justify-center">
+          <div class="text-center p-8 bg-gray-700 rounded-lg shadow-xl max-w-lg">
+              <h2 class="text-2xl font-bold text-red-400">Connection Error</h2>
+              <p id="app-error-message" class="mt-2 text-gray-300">Could not connect to the database.</p>
+          </div>
       </div>
     </div>
 

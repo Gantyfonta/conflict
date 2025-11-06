@@ -53,6 +53,8 @@ const addServerForm = document.getElementById('add-server-form');
 const cancelAddServerButton = document.getElementById('cancel-add-server');
 // FIX: Cast to HTMLInputElement to access 'value' property.
 const serverNameInput = document.getElementById('server-name-input') as HTMLInputElement;
+const appErrorOverlay = document.getElementById('app-error-overlay');
+const appErrorMessage = document.getElementById('app-error-message');
 
 
 // =================================================================================
@@ -70,22 +72,37 @@ let usersUnsubscribe = () => {};
 // =================================================================================
 auth.onAuthStateChanged(async (user: any) => {
   if (user) {
-    // User is signed in.
-    currentUser = {
-      uid: user.uid,
-      displayName: user.displayName,
-      photoURL: user.photoURL,
-    };
-    await db.collection('users').doc(user.uid).set({
-      displayName: user.displayName,
-      photoURL: user.photoURL,
-      status: 'online',
-    }, { merge: true });
+    try {
+        // User is signed in.
+        // Hide any previous errors
+        appErrorOverlay.classList.add('hidden');
 
-    loginView.classList.add('hidden');
-    appView.classList.remove('hidden');
-    renderUserInfo();
-    loadServers();
+        currentUser = {
+          uid: user.uid,
+          displayName: user.displayName,
+          photoURL: user.photoURL,
+        };
+        await db.collection('users').doc(user.uid).set({
+          displayName: user.displayName,
+          photoURL: user.photoURL,
+          status: 'online',
+        }, { merge: true });
+
+        loginView.classList.add('hidden');
+        appView.classList.remove('hidden');
+        renderUserInfo();
+        loadServers();
+    } catch (error) {
+        console.error("Firestore Error:", error);
+        loginView.classList.add('hidden');
+        appView.classList.remove('hidden');
+        if (appErrorMessage) {
+            appErrorMessage.textContent = 'Failed to connect to the database. Please ensure Cloud Firestore has been created in your Firebase project console and the security rules are correctly configured.';
+        }
+        if (appErrorOverlay) {
+            appErrorOverlay.style.display = 'flex';
+        }
+    }
   } else {
     // User is signed out.
     currentUser = null;

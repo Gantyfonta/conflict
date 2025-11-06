@@ -50,6 +50,8 @@ const addServerModal = document.getElementById('add-server-modal');
 const addServerForm = document.getElementById('add-server-form');
 const cancelAddServerButton = document.getElementById('cancel-add-server');
 const serverNameInput = document.getElementById('server-name-input');
+const appErrorOverlay = document.getElementById('app-error-overlay');
+const appErrorMessage = document.getElementById('app-error-message');
 
 
 // =================================================================================
@@ -67,27 +69,42 @@ let usersUnsubscribe = () => {};
 // =================================================================================
 auth.onAuthStateChanged(async (user) => {
   if (user) {
-    // User is signed in.
-    currentUser = {
-      uid: user.uid,
-      displayName: user.displayName,
-      photoURL: user.photoURL,
-    };
-    await db.collection('users').doc(user.uid).set({
-      displayName: user.displayName,
-      photoURL: user.photoURL,
-      status: 'online',
-    }, { merge: true });
+    try {
+      // Hide any previous errors on a new sign-in attempt
+      appErrorOverlay.classList.add('hidden');
 
-    loginView.classList.add('hidden');
-    appView.classList.remove('hidden');
-    renderUserInfo();
-    loadServers();
+      // User is signed in.
+      currentUser = {
+        uid: user.uid,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+      };
+      // This is the first interaction with Firestore. If it fails, the user likely hasn't created the database.
+      await db.collection('users').doc(user.uid).set({
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+        status: 'online',
+      }, { merge: true });
+
+      loginView.classList.add('hidden');
+      appView.classList.remove('hidden');
+      renderUserInfo();
+      loadServers();
+    } catch (error) {
+        console.error("Firestore connection error:", error);
+        // Show the main app view but cover it with an error overlay
+        loginView.classList.add('hidden');
+        appView.classList.remove('hidden');
+        appErrorMessage.textContent = 'Failed to connect to the database. Please ensure Cloud Firestore has been created in your Firebase project console and the security rules are correctly configured.';
+        appErrorOverlay.classList.remove('hidden');
+    }
   } else {
     // User is signed out.
     currentUser = null;
     loginView.classList.remove('hidden');
     appView.classList.add('hidden');
+     // Ensure error overlay is hidden on logout
+    appErrorOverlay.classList.add('hidden');
   }
 });
 
