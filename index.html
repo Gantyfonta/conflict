@@ -180,8 +180,8 @@
                 <p class="mt-2">Create a server or add a friend to get started.</p>
             </div>
         </div>
-        <div id="chat-view" class="hidden flex-1 flex-col">
-          <header id="chat-header" class="h-12 flex items-center px-4 shadow-md border-b border-gray-900/50">
+        <div id="chat-view" class="hidden flex-1 flex-col overflow-hidden">
+          <header id="chat-header" class="h-12 flex items-center px-4 shadow-md border-b border-gray-900/50 flex-shrink-0">
             <!-- Channel/DM name rendered by JS -->
           </header>
           <main class="flex-1 flex overflow-hidden">
@@ -189,7 +189,7 @@
               <div id="message-list" class="flex-1 p-2 overflow-y-auto">
                 <!-- Messages rendered by JS -->
               </div>
-              <div class="px-4 pb-4">
+              <div class="px-4 pb-4 flex-shrink-0">
                 <form id="message-form" class="bg-gray-600 rounded-lg flex items-center px-4">
                   <input id="message-input" type="text" placeholder="Message..." class="flex-1 bg-transparent py-3 text-white placeholder-gray-400 focus:outline-none" autocomplete="off" />
                   <button type="submit" id="send-button" class="text-blue-400 hover:text-blue-300 disabled:text-gray-500 disabled:cursor-not-allowed">
