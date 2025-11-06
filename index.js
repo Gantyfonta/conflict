@@ -334,7 +334,7 @@ const renderMessages = (messages) => {
             // Render a compact message (only the text and a hoverable timestamp)
             messageEl.className = 'flex items-center pl-14 pr-4 py-0.5 hover:bg-gray-800/50 group';
             messageEl.innerHTML = `
-                <p class="text-gray-200 whitespace-pre-wrap">${msg.text}</p>
+                <p class="text-gray-200 whitespace-pre-wrap break-words">${msg.text}</p>
                 <span class="text-xs text-gray-500 ml-auto pl-4 opacity-0 group-hover:opacity-100 transition-opacity">${msg.timestamp ? new Date(msg.timestamp.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
             `;
         } else {
@@ -348,7 +348,7 @@ const renderMessages = (messages) => {
                         <span class="font-semibold text-white mr-2">${msg.user.displayName}</span>
                         <span class="text-xs text-gray-500">${timestamp}</span>
                     </div>
-                    <p class="text-gray-200 whitespace-pre-wrap">${msg.text}</p>
+                    <p class="text-gray-200 whitespace-pre-wrap break-words">${msg.text}</p>
                 </div>
             `;
         }
@@ -733,18 +733,44 @@ const handleUpdateProfile = async (e) => {
     }
 };
 
+async function deleteServer(serverRef) {
+  const channelsSnapshot = await serverRef.collection('channels').get();
+  for (const channelDoc of channelsSnapshot.docs) {
+    const messagesSnapshot = await channelDoc.ref.collection('messages').get();
+    const batch = db.batch();
+    messagesSnapshot.forEach(msgDoc => {
+      batch.delete(msgDoc.ref);
+    });
+    await batch.commit();
+    await channelDoc.ref.delete();
+  }
+  await serverRef.delete();
+  console.log(`Server ${serverRef.id} and all its content have been deleted.`);
+}
+
 const handleLeaveServer = async () => {
     if (!activeServerId || !currentUser) return;
-    
-    const serverDoc = await db.collection('servers').doc(activeServerId).get();
+    const serverRef = db.collection('servers').doc(activeServerId);
+    const serverDoc = await serverRef.get();
+    if (!serverDoc.exists) return;
+
     const serverName = serverDoc.data().name;
 
     if (confirm(`Are you sure you want to leave ${serverName}?`)) {
         try {
-            const serverRef = db.collection('servers').doc(activeServerId);
             await serverRef.update({
                 members: firebase.firestore.FieldValue.arrayRemove(currentUser.uid)
             });
+
+            const updatedServerDoc = await serverRef.get();
+            if (updatedServerDoc.exists) {
+                const members = updatedServerDoc.data().members || [];
+                if (members.length === 0) {
+                    console.log(`Server ${serverName} is now empty. Deleting...`);
+                    await deleteServer(serverRef);
+                }
+            }
+            
             selectHome();
         } catch (error) {
             console.error("Error leaving server:", error);
