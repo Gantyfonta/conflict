@@ -797,11 +797,22 @@ const handleSendMessage = async (e) => {
 
     // Command handling
     if (text.startsWith('/')) {
+        // Handle commands that don't send a message first
+        if (text === '/tetris') {
+            window.open('https://www.freetetris.org/game.php', 'tetris', 'width=400,height=600,resizable=yes');
+            messageInput.value = '';
+            cancelImagePreview();
+            messageInput.dispatchEvent(new Event('input', { bubbles: true }));
+            return; // Exit after handling the command
+        }
+        
         let commandResultText = null;
         if (text === '/coinflip') {
             commandResultText = Math.random() < 0.5 ? 'Heads' : 'Tails';
         } else if (text === '/dice') {
             commandResultText = `${Math.floor(Math.random() * 6) + 1}`;
+        } else if (text === '/shrug') {
+            commandResultText = '¯\\_(ツ)_/¯';
         }
         
         if (commandResultText) {
