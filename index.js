@@ -326,12 +326,30 @@ let activeServerRoleOrder = [];
 let activeServerMembers = {}; // { userId: { roles: [...] } }
 let allServerUsers = []; // { id, displayName, photoURL, status }
 let stagedFile = null;
+let draggedRoleId = null;
+
+// Unsubscribe listeners
 let messageUnsubscribe = () => {};
 let channelUnsubscribe = () => {};
 let usersUnsubscribe = () => {};
 let serversUnsubscribe = () => {};
 let friendsUnsubscribe = () => {};
-let draggedRoleId = null;
+let callListenerUnsubscribe = () => {};
+let currentCallUnsubscribe = () => {};
+
+
+// WebRTC State
+let peerConnection;
+let localStream;
+let remoteStream;
+let activeCallData = null;
+const iceServers = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+  ],
+};
+
 
 // =================================================================================
 // Authentication
@@ -371,6 +389,7 @@ auth.onAuthStateChanged(async (user) => {
       loadServers();
       loadFriends();
       setupPresence();
+      setupCallListener();
       selectHome(); // Default to home view on login
 
     } catch (error) {
@@ -400,6 +419,9 @@ auth.onAuthStateChanged(async (user) => {
     if(messageUnsubscribe) messageUnsubscribe();
     if(usersUnsubscribe) usersUnsubscribe();
     if(friendsUnsubscribe) friendsUnsubscribe();
+    if(callListenerUnsubscribe) callListenerUnsubscribe();
+    if(currentCallUnsubscribe) currentCallUnsubscribe();
+    await hangUp();
   }
 });
 
@@ -875,7 +897,8 @@ const loadFriends = () => {
 };
 
 
-const selectHome = () => {
+const selectHome = async () => {
+    await hangUp();
     activeView = 'home';
     activeServerId = null;
     activeChannelId = null;
@@ -918,7 +941,7 @@ const selectHome = () => {
 
 const selectServer = async (serverId) => {
     if (activeServerId === serverId && activeView === 'servers') return;
-
+    await hangUp();
     activeView = 'servers';
     activeServerId = serverId;
     activeChannelId = null;
@@ -1033,7 +1056,8 @@ const selectChannel = (channelId) => {
     });
 };
 
-const selectDmChannel = (friend) => {
+const selectDmChannel = async (friend) => {
+    await hangUp();
     activeChannelId = getDmChannelId(friend.id);
     if (messageUnsubscribe) messageUnsubscribe();
     
@@ -1048,13 +1072,22 @@ const selectDmChannel = (friend) => {
     if(userListAside) userListAside.style.display = 'none';
     
     const dmAvatarUrl = isValidHttpUrl(friend.photoURL) ? friend.photoURL : DEFAULT_AVATAR_SVG;
-    if(chatHeader) chatHeader.innerHTML = `
-        <div class="relative mr-2">
-            <img src="${dmAvatarUrl}" alt="${friend.displayName}" class="w-7 h-7 rounded-full object-cover" />
-            <div class="absolute bottom-0 right-0 w-2 h-2 ${friend.status === 'online' ? 'bg-green-500' : 'bg-gray-500'} border border-gray-800 rounded-full"></div>
-        </div>
-        <h2 class="font-semibold text-lg text-white">${friend.displayName}</h2>
-    `;
+    if(chatHeader) {
+        chatHeader.innerHTML = `
+            <div class="flex items-center">
+                <div class="relative mr-2">
+                    <img src="${dmAvatarUrl}" alt="${friend.displayName}" class="w-7 h-7 rounded-full object-cover" />
+                    <div class="absolute bottom-0 right-0 w-2 h-2 ${friend.status === 'online' ? 'bg-green-500' : 'bg-gray-500'} border border-gray-800 rounded-full"></div>
+                </div>
+                <h2 class="font-semibold text-lg text-white">${friend.displayName}</h2>
+            </div>
+            <button id="start-call-button" class="ml-auto text-gray-400 hover:text-white p-1 rounded-full hover:bg-gray-600">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"></path></svg>
+            </button>
+        `;
+        document.getElementById('start-call-button').onclick = () => startCall(friend);
+    }
+
     if(messageInput) messageInput.placeholder = `Message @${friend.displayName}`;
 
     const dmRef = db.collection('dms').doc(activeChannelId);
@@ -1468,6 +1501,254 @@ const cancelFilePreview = () => {
     if (sendButton && messageInput && !messageInput.value.trim()) {
         sendButton.disabled = true;
     }
+};
+
+// =================================================================================
+// WebRTC Voice Call Functions
+// =================================================================================
+
+const setupCallListener = () => {
+    if (callListenerUnsubscribe) callListenerUnsubscribe();
+    callListenerUnsubscribe = db.collection('calls')
+        .where('calleeId', '==', currentUser.uid)
+        .where('status', '==', 'ringing')
+        .onSnapshot(snapshot => {
+            if (!snapshot.empty) {
+                const callDoc = snapshot.docs[0];
+                handleIncomingCall({ id: callDoc.id, ...callDoc.data() });
+            }
+        });
+};
+
+const handleIncomingCall = async (callData) => {
+    if (activeCallData) return; // Already in a call
+    activeCallData = callData;
+    const callerDoc = await db.collection('users').doc(callData.callerId).get();
+    const caller = callerDoc.data();
+
+    showCallUI('incoming', caller);
+};
+
+const startCall = async (friend) => {
+    if (activeCallData) return alert("You are already in a call.");
+    
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (error) {
+        console.error("Could not get microphone access:", error);
+        alert("Microphone access is required for voice calls.");
+        return;
+    }
+
+    const callRef = db.collection('calls').doc();
+    activeCallData = { 
+        id: callRef.id,
+        callerId: currentUser.uid,
+        calleeId: friend.id,
+        status: 'ringing'
+    };
+    
+    showCallUI('outgoing', friend);
+
+    peerConnection = new RTCPeerConnection(iceServers);
+    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+    peerConnection.onicecandidate = event => {
+        if (event.candidate) {
+            callRef.collection('callerCandidates').add(event.candidate.toJSON());
+        }
+    };
+    
+    peerConnection.ontrack = event => {
+        const remoteAudio = document.getElementById('remote-audio');
+        if (event.streams && event.streams[0]) {
+            remoteAudio.srcObject = event.streams[0];
+        }
+    };
+
+    const offerDescription = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offerDescription);
+
+    const offer = { sdp: offerDescription.sdp, type: offerDescription.type };
+    await callRef.set({ ...activeCallData, offer });
+
+    currentCallUnsubscribe = callRef.onSnapshot(async (snapshot) => {
+        const data = snapshot.data();
+        if (data.answer && !peerConnection.currentRemoteDescription) {
+            const answerDescription = new RTCSessionDescription(data.answer);
+            await peerConnection.setRemoteDescription(answerDescription);
+            await callRef.update({ status: 'active' });
+            showCallUI('active', friend);
+        }
+        if(data.status === 'ended' || !data.status) {
+            await hangUp();
+        }
+    });
+
+    callRef.collection('calleeCandidates').onSnapshot(snapshot => {
+        snapshot.docChanges().forEach(change => {
+            if (change.type === 'added') {
+                const candidate = new RTCIceCandidate(change.doc.data());
+                peerConnection.addIceCandidate(candidate);
+            }
+        });
+    });
+};
+
+const answerCall = async () => {
+    const callRef = db.collection('calls').doc(activeCallData.id);
+    const callerDoc = await db.collection('users').doc(activeCallData.callerId).get();
+    const caller = callerDoc.data();
+    showCallUI('connecting', caller);
+    
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (error) {
+        console.error("Could not get microphone access:", error);
+        alert("Microphone access is required for voice calls.");
+        await hangUp();
+        return;
+    }
+    
+    peerConnection = new RTCPeerConnection(iceServers);
+    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+    peerConnection.onicecandidate = event => {
+        if (event.candidate) {
+            callRef.collection('calleeCandidates').add(event.candidate.toJSON());
+        }
+    };
+
+    peerConnection.ontrack = event => {
+        const remoteAudio = document.getElementById('remote-audio');
+        if (event.streams && event.streams[0]) {
+            remoteAudio.srcObject = event.streams[0];
+        }
+    };
+
+    const callDoc = await callRef.get();
+    const offerDescription = callDoc.data().offer;
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(offerDescription));
+
+    const answerDescription = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answerDescription);
+
+    const answer = { type: answerDescription.type, sdp: answerDescription.sdp };
+    await callRef.update({ answer, status: 'active' });
+    showCallUI('active', caller);
+
+    callRef.collection('callerCandidates').onSnapshot(snapshot => {
+        snapshot.docChanges().forEach(change => {
+            if (change.type === 'added') {
+                const candidate = new RTCIceCandidate(change.doc.data());
+                peerConnection.addIceCandidate(candidate);
+            }
+        });
+    });
+
+    currentCallUnsubscribe = callRef.onSnapshot(async (snapshot) => {
+         const data = snapshot.data();
+         if(data.status === 'ended' || !data.status) {
+             await hangUp();
+         }
+    });
+};
+
+const hangUp = async () => {
+    const callOverlay = document.getElementById('call-overlay');
+    callOverlay.classList.add('hidden');
+    callOverlay.innerHTML = '';
+    
+    if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+    }
+    if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
+    }
+    const remoteAudio = document.getElementById('remote-audio');
+    if (remoteAudio) remoteAudio.srcObject = null;
+    
+    if (currentCallUnsubscribe) {
+        currentCallUnsubscribe();
+        currentCallUnsubscribe = null;
+    }
+
+    if (activeCallData) {
+        const callRef = db.collection('calls').doc(activeCallData.id);
+        const callDoc = await callRef.get();
+        if(callDoc.exists) {
+            // Delete candidates subcollections
+            const callerCandidates = await callRef.collection('callerCandidates').get();
+            callerCandidates.forEach(async doc => await doc.ref.delete());
+            const calleeCandidates = await callRef.collection('calleeCandidates').get();
+            calleeCandidates.forEach(async doc => await doc.ref.delete());
+            // Delete call document
+            await callRef.delete();
+        }
+        activeCallData = null;
+    }
+};
+
+const showCallUI = (state, peerUser) => {
+    const callOverlay = document.getElementById('call-overlay');
+    callOverlay.classList.remove('hidden');
+
+    let content = '';
+    let statusText = '';
+
+    switch(state) {
+        case 'outgoing': statusText = `Calling ${peerUser.displayName}...`; break;
+        case 'incoming': statusText = `${peerUser.displayName} is calling...`; break;
+        case 'connecting': statusText = `Connecting...`; break;
+        case 'active': statusText = `Voice connected`; break;
+    }
+    
+    const peerAvatar = isValidHttpUrl(peerUser.photoURL) ? peerUser.photoURL : DEFAULT_AVATAR_SVG;
+
+    content = `
+        <div class="flex items-center">
+            <img src="${peerAvatar}" class="w-8 h-8 rounded-full mr-3 object-cover">
+            <div>
+                <div class="font-semibold text-white">${peerUser.displayName}</div>
+                <div class="text-sm text-gray-400">${statusText}</div>
+            </div>
+        </div>
+        <div class="flex items-center space-x-2">
+    `;
+
+    if (state === 'incoming') {
+        content += `
+            <button id="answer-call-button" class="p-2 bg-green-500 rounded-full text-white hover:bg-green-600">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"></path></svg>
+            </button>
+            <button id="hangup-call-button" class="p-2 bg-red-500 rounded-full text-white hover:bg-red-600">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v1.172l5.071 5.071a1 1 0 01-1.414 1.414L11 7.414V13a1 1 0 11-2 0V7.414l-3.657 3.657a1 1 0 01-1.414-1.414L9 6.172V4a1 1 0 011-1zm3.293 11.293a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-5-5a1 1 0 011.414-1.414L8 14.586V9a1 1 0 112 0v5.586l3.293-3.293z" clip-rule="evenodd" transform="rotate(135 10 10)"></path></svg>
+            </button>
+        `;
+    } else if (state === 'active') {
+        content += `
+            <button id="mute-call-button" class="p-2 bg-gray-600 rounded-full text-white hover:bg-gray-500" data-muted="false">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M5.5 2.5a2.5 2.5 0 014.123 1.9L6 7.561V5a2.5 2.5 0 01-.5-4.902z"></path><path d="M4.5 5v.561l1 1V5a1.5 1.5 0 013 0v3.061l-1.396-.786A.5.5 0 007 7.5v0a.5.5 0 00-.5.5v1.44l-1 1V10a.5.5 0 00.5.5v0a.5.5 0 00.5-.5V8.268l1-.563a1.5 1.5 0 011.5 1.3V10a2.5 2.5 0 01-5 0V5z"></path><path d="M10 12.5a.5.5 0 01.5.5v1a.5.5 0 01-1 0v-1a.5.5 0 01.5-.5z"></path><path d="M12 11.5a.5.5 0 00-.5.5v3a.5.5 0 001 0v-3a.5.5 0 00-.5-.5z"></path><path d="M3.323 2.323a.5.5 0 01.707-.707l12 12a.5.5 0 01-.707.707l-12-12z"></path></svg>
+            </button>
+            <button id="hangup-call-button" class="p-2 bg-red-500 rounded-full text-white hover:bg-red-600">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v1.172l5.071 5.071a1 1 0 01-1.414 1.414L11 7.414V13a1 1 0 11-2 0V7.414l-3.657 3.657a1 1 0 01-1.414-1.414L9 6.172V4a1 1 0 011-1zm3.293 11.293a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-5-5a1 1 0 011.414-1.414L8 14.586V9a1 1 0 112 0v5.586l3.293-3.293z" clip-rule="evenodd" transform="rotate(135 10 10)"></path></svg>
+            </button>
+        `;
+    } else { // outgoing, connecting
+        content += `
+            <button id="hangup-call-button" class="p-2 bg-red-500 rounded-full text-white hover:bg-red-600">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v1.172l5.071 5.071a1 1 0 01-1.414 1.414L11 7.414V13a1 1 0 11-2 0V7.414l-3.657 3.657a1 1 0 01-1.414-1.414L9 6.172V4a1 1 0 011-1zm3.293 11.293a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-5-5a1 1 0 011.414-1.414L8 14.586V9a1 1 0 112 0v5.586l3.293-3.293z" clip-rule="evenodd" transform="rotate(135 10 10)"></path></svg>
+            </button>
+        `;
+    }
+
+    content += `</div>`;
+    callOverlay.innerHTML = content;
+
+    document.getElementById('hangup-call-button')?.addEventListener('click', hangUp);
+    document.getElementById('answer-call-button')?.addEventListener('click', answerCall);
 };
 
 
