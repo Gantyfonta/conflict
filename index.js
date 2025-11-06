@@ -35,6 +35,7 @@ const logoutButton = document.getElementById('logout-button');
 const serverList = document.getElementById('server-list');
 const channelListPanel = document.getElementById('channel-list-panel');
 const serverNameHeader = document.getElementById('server-name-header');
+const serverNameText = document.getElementById('server-name-text');
 const channelList = document.getElementById('channel-list');
 const userInfoPanel = document.getElementById('user-info-panel');
 const chatPanel = document.getElementById('chat-panel');
@@ -73,6 +74,20 @@ const profileUsernameInput = document.getElementById('profile-username-input');
 const profileAvatarInput = document.getElementById('profile-avatar-input');
 const friendCodeDisplay = document.getElementById('friend-code-display');
 const cancelProfileChangesButton = document.getElementById('cancel-profile-changes');
+
+// Server Dropdown Elements
+const serverSettingsButton = document.getElementById('server-settings-button');
+const serverSettingsDropdown = document.getElementById('server-settings-dropdown');
+const inviteButton = document.getElementById('invite-button');
+const leaveServerButton = document.getElementById('leave-server-button');
+
+// Invite Modal Elements
+const inviteModal = document.getElementById('invite-modal');
+const inviteForm = document.getElementById('invite-form');
+const inviteServerName = document.getElementById('invite-server-name');
+const friendCodeInput = document.getElementById('friend-code-input');
+const inviteStatusMessage = document.getElementById('invite-status-message');
+const cancelInviteButton = document.getElementById('cancel-invite-button');
 
 
 // =================================================================================
@@ -261,7 +276,7 @@ const renderServers = (servers) => {
 };
 
 const renderChannels = (server, channels) => {
-    serverNameHeader.textContent = server.name;
+    serverNameText.textContent = server.name;
     channelList.innerHTML = `
         <div class="flex items-center justify-between px-2 pt-2 pb-1">
             <h2 class="text-xs font-bold tracking-wider text-gray-400 uppercase">Text Channels</h2>
@@ -302,7 +317,7 @@ const renderMessages = (messages) => {
 };
 
 const renderUsers = (users) => {
-    userListAside.innerHTML = `<h3 class="text-xs font-bold uppercase text-gray-400 px-2 pt-2 pb-1">Users — ${users.length}</h3>`;
+    userListAside.innerHTML = `<h3 class="text-xs font-bold uppercase text-gray-400 px-2 pt-2 pb-1">Members — ${users.length}</h3>`;
     users.forEach(user => {
         const userEl = document.createElement('div');
         userEl.className = "flex items-center justify-between p-2 rounded-md";
@@ -327,21 +342,34 @@ const loadServers = () => {
     if (serversUnsubscribe) serversUnsubscribe();
     if (!currentUser) return;
 
-    serversUnsubscribe = db.collection('users').doc(currentUser.uid).collection('servers').orderBy('createdAt').onSnapshot((snapshot) => {
-        const servers = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-        renderServers(servers);
+    serversUnsubscribe = db.collection('servers')
+        .where('members', 'array-contains', currentUser.uid)
+        .orderBy('createdAt')
+        .onSnapshot((snapshot) => {
+            const userServers = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+            renderServers(userServers);
 
-        if (!activeServerId && servers.length > 0) {
-            selectServer(servers[0].id);
-        } else if (servers.length === 0) {
-            // No servers, show placeholder
-            activeServerId = null;
-            activeChannelId = null;
-            channelListPanel.style.display = 'none';
-            placeholderView.style.display = 'flex';
-            chatView.style.display = 'none';
-        }
-    });
+            if (!activeServerId && userServers.length > 0) {
+                selectServer(userServers[0].id);
+            } else if (userServers.length === 0) {
+                // No servers, show placeholder
+                activeServerId = null;
+                activeChannelId = null;
+                channelListPanel.style.display = 'none';
+                placeholderView.style.display = 'flex';
+                chatView.style.display = 'none';
+            } else if (activeServerId && !userServers.some(s => s.id === activeServerId)) {
+                // If the active server was deleted or left, reset view
+                activeServerId = null;
+                activeChannelId = null;
+                channelListPanel.style.display = 'none';
+                placeholderView.style.display = 'flex';
+                chatView.style.display = 'none';
+                if (userServers.length > 0) {
+                    selectServer(userServers[0].id);
+                }
+            }
+        });
 };
 
 
@@ -349,17 +377,16 @@ const selectServer = async (serverId) => {
     if (activeServerId === serverId && channelListPanel.style.display !== 'none') return;
 
     activeServerId = serverId;
-    activeChannelId = null; 
+    activeChannelId = null;
 
-    if(channelUnsubscribe) channelUnsubscribe();
-    if(usersUnsubscribe) usersUnsubscribe();
-    
-    // Visually update servers list for active state
-    const serverDocs = [];
-    const snapshot = await db.collection('users').doc(currentUser.uid).collection('servers').get();
-    snapshot.forEach((doc) => serverDocs.push({id: doc.id, ...doc.data()}));
-    renderServers(serverDocs);
-    
+    if (channelUnsubscribe) channelUnsubscribe();
+    if (usersUnsubscribe) usersUnsubscribe();
+
+    // Re-render servers to update active state
+    const snapshot = await db.collection('servers').where('members', 'array-contains', currentUser.uid).orderBy('createdAt').get();
+    const allUserServers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    renderServers(allUserServers);
+
     channelListPanel.style.display = 'flex';
     placeholderView.style.display = 'flex';
     chatView.style.display = 'none';
@@ -370,62 +397,74 @@ const selectServer = async (serverId) => {
         </div>
     `;
 
-    const serverDoc = await db.collection('users').doc(currentUser.uid).collection('servers').doc(serverId).get();
-    if (serverDoc.exists) {
-        const serverData = serverDoc.data();
-        channelUnsubscribe = db.collection('users').doc(currentUser.uid).collection('servers').doc(serverId).collection('channels').onSnapshot((snapshot) => {
+    const serverRef = db.collection('servers').doc(serverId);
+
+    // Listener for server details (name) and members
+    usersUnsubscribe = serverRef.onSnapshot(async (doc) => {
+        if (doc.exists) {
+            const serverData = doc.data();
+            const memberUIDs = serverData.members || [];
+            if (memberUIDs.length > 0) {
+                const userDocs = await db.collection('users').where(firebase.firestore.FieldPath.documentId(), 'in', memberUIDs).get();
+                const users = userDocs.docs.map(d => ({ id: d.id, ...d.data() }));
+                renderUsers(users);
+            } else {
+                renderUsers([]);
+            }
+        }
+    });
+
+    // Listener for channels in the server
+    channelUnsubscribe = serverRef.collection('channels').orderBy('name').onSnapshot((snapshot) => {
+        serverRef.get().then((serverDoc) => {
+            if (!serverDoc.exists) return;
             const channels = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-            renderChannels(serverData, channels);
+            renderChannels(serverDoc.data(), channels);
             if (!activeChannelId && channels.length > 0) {
                 selectChannel(channels[0].id);
             }
         });
-    }
-
-    usersUnsubscribe = db.collection('users').onSnapshot((snapshot) => {
-        const users = snapshot.docs.map((doc) => ({id: doc.id, ...doc.data()}));
-        renderUsers(users);
     });
 };
 
 const selectChannel = (channelId) => {
-  activeChannelId = channelId;
-  if (messageUnsubscribe) messageUnsubscribe();
+    activeChannelId = channelId;
+    if (messageUnsubscribe) messageUnsubscribe();
 
-  placeholderView.style.display = 'none';
-  chatView.style.display = 'flex';
-  
-  const channelRef = db.collection('users').doc(currentUser.uid).collection('servers').doc(activeServerId).collection('channels').doc(channelId);
+    placeholderView.style.display = 'none';
+    chatView.style.display = 'flex';
 
-  channelRef.get().then((doc) => {
-      if (doc.exists) {
-        const channelData = doc.data();
-        chatHeader.innerHTML = `
+    const channelRef = db.collection('servers').doc(activeServerId).collection('channels').doc(channelId);
+
+    channelRef.get().then((doc) => {
+        if (doc.exists) {
+            const channelData = doc.data();
+            chatHeader.innerHTML = `
             <svg class="w-6 h-6 text-gray-500 mr-2" fill="currentColor" viewBox="0 0 24 24"><path d="M10 9h4V7h-4v2zm-2 4h4v-2H8v2zm10-4v2h-4V9h4zm2-2h-4V5h4v2zm-4 8h4v-2h-4v2zm-2-4h-4v2h4v-2zm-2 4h2v2h-2v-2zm-6-4H4v2h2v-2zM6 7H4v2h2V7zm10 10v-2h-4v2h4zm-6 0v-2H8v2h2z"></path></svg>
             <h2 class="font-semibold text-lg text-white">${channelData.name}</h2>
         `;
-        messageInput.placeholder = `Message #${channelData.name}`;
-      }
-  });
-
-  messageUnsubscribe = channelRef.collection('messages').orderBy('timestamp', 'asc').onSnapshot((snapshot) => {
-      const messages = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      renderMessages(messages);
+            messageInput.placeholder = `Message #${channelData.name}`;
+        }
     });
 
-  // Re-render channels to show active state
-  db.collection('users').doc(currentUser.uid).collection('servers').doc(activeServerId).get().then((serverDoc) => {
-      db.collection('users').doc(currentUser.uid).collection('servers').doc(activeServerId).collection('channels').get().then((channelDocs) => {
-          renderChannels(serverDoc.data(), channelDocs.docs.map((d) => ({id: d.id, ...d.data()})));
-      });
-  });
+    messageUnsubscribe = channelRef.collection('messages').orderBy('timestamp', 'asc').onSnapshot((snapshot) => {
+        const messages = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+        renderMessages(messages);
+    });
+
+    // Re-render channels to show active state
+    db.collection('servers').doc(activeServerId).get().then((serverDoc) => {
+        db.collection('servers').doc(activeServerId).collection('channels').orderBy('name').get().then((channelDocs) => {
+            renderChannels(serverDoc.data(), channelDocs.docs.map((d) => ({ id: d.id, ...d.data() })));
+        });
+    });
 };
 
 const handleSendMessage = (e) => {
   e.preventDefault();
   const text = messageInput.value.trim();
-  if (text && activeChannelId && currentUser) {
-    db.collection('users').doc(currentUser.uid).collection('servers').doc(activeServerId).collection('channels').doc(activeChannelId).collection('messages').add({
+  if (text && activeServerId && activeChannelId && currentUser) {
+    db.collection('servers').doc(activeServerId).collection('channels').doc(activeChannelId).collection('messages').add({
       text: text,
       timestamp: firebase.firestore.FieldValue.serverTimestamp(),
       user: {
@@ -442,19 +481,21 @@ const handleCreateServer = async (e) => {
     e.preventDefault();
     const serverName = serverNameInput.value.trim();
     if(serverName && currentUser) {
-        const newServer = await db.collection('users').doc(currentUser.uid).collection('servers').add({
+        const newServerRef = db.collection('servers').doc();
+        await newServerRef.set({
             name: serverName,
             iconUrl: `https://picsum.photos/seed/${Date.now()}/64/64`,
             owner: currentUser.uid,
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            members: [currentUser.uid]
         });
-        await db.collection('users').doc(currentUser.uid).collection('servers').doc(newServer.id).collection('channels').doc('general').set({
+        await newServerRef.collection('channels').doc('general').set({
             name: 'general'
         });
         
         serverNameInput.value = '';
         addServerModal.style.display = 'none';
-        selectServer(newServer.id);
+        selectServer(newServerRef.id);
     }
 };
 
@@ -489,6 +530,59 @@ const handleUpdateProfile = async (e) => {
     }
 };
 
+const handleLeaveServer = async () => {
+    if (!activeServerId || !currentUser) return;
+    
+    const serverDoc = await db.collection('servers').doc(activeServerId).get();
+    const serverName = serverDoc.data().name;
+
+    if (confirm(`Are you sure you want to leave ${serverName}?`)) {
+        try {
+            const serverRef = db.collection('servers').doc(activeServerId);
+            await serverRef.update({
+                members: firebase.firestore.FieldValue.arrayRemove(currentUser.uid)
+            });
+        } catch (error) {
+            console.error("Error leaving server:", error);
+            alert("Failed to leave server.");
+        }
+    }
+};
+
+const handleInviteFriend = async (e) => {
+    e.preventDefault();
+    const friendId = friendCodeInput.value.trim();
+    if (!friendId || !activeServerId) return;
+
+    inviteStatusMessage.textContent = 'Sending...';
+    inviteStatusMessage.className = 'text-sm mt-2 h-4 text-gray-400';
+
+    try {
+        const userDoc = await db.collection('users').doc(friendId).get();
+        if (!userDoc.exists) {
+            inviteStatusMessage.textContent = 'User not found.';
+            inviteStatusMessage.className = 'text-sm mt-2 h-4 text-red-400';
+            return;
+        }
+        
+        const serverRef = db.collection('servers').doc(activeServerId);
+        await serverRef.update({
+            members: firebase.firestore.FieldValue.arrayUnion(friendId)
+        });
+
+        inviteStatusMessage.textContent = `Invite sent to ${userDoc.data().displayName}!`;
+        inviteStatusMessage.className = 'text-sm mt-2 h-4 text-green-400';
+        friendCodeInput.value = '';
+        setTimeout(() => { inviteModal.style.display = 'none'; }, 2000);
+
+    } catch (error) {
+        console.error("Error sending invite:", error);
+        inviteStatusMessage.textContent = 'Failed to send invite.';
+        inviteStatusMessage.className = 'text-sm mt-2 h-4 text-red-400';
+    }
+};
+
+
 // =================================================================================
 // Event Listeners
 // =================================================================================
@@ -498,6 +592,8 @@ messageForm.addEventListener('submit', handleSendMessage);
 addServerForm.addEventListener('submit', handleCreateServer);
 signupForm.addEventListener('submit', handleSignUp);
 signinForm.addEventListener('submit', handleSignIn);
+inviteForm.addEventListener('submit', handleInviteFriend);
+leaveServerButton.addEventListener('click', handleLeaveServer);
 
 showSigninLink.addEventListener('click', (e) => {
     e.preventDefault();
@@ -544,6 +640,35 @@ profileModal.addEventListener('click', (e) => {
     }
 });
 profileForm.addEventListener('submit', handleUpdateProfile);
+
+// Server Settings Dropdown
+serverSettingsButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    serverSettingsDropdown.classList.toggle('hidden');
+});
+
+document.addEventListener('click', () => {
+    if (!serverSettingsDropdown.classList.contains('hidden')) {
+        serverSettingsDropdown.classList.add('hidden');
+    }
+});
+
+// Invite Modal
+inviteButton.addEventListener('click', async () => {
+    const serverDoc = await db.collection('servers').doc(activeServerId).get();
+    inviteServerName.textContent = serverDoc.data().name;
+    friendCodeInput.value = '';
+    inviteStatusMessage.textContent = '';
+    inviteModal.style.display = 'flex';
+});
+cancelInviteButton.addEventListener('click', () => {
+    inviteModal.style.display = 'none';
+});
+inviteModal.addEventListener('click', (e) => {
+    if (e.target === inviteModal) {
+        inviteModal.style.display = 'none';
+    }
+});
 
 
 messageInput.addEventListener('input', () => {

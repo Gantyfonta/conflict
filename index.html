@@ -123,8 +123,18 @@
 
       <!-- Channel List Panel -->
       <div id="channel-list-panel" class="w-64 bg-gray-800 flex-col hidden">
-        <header id="server-name-header" class="px-4 h-12 flex items-center shadow-md font-bold text-lg border-b border-gray-900/50 truncate">
-          <!-- Server name rendered by JS -->
+        <header id="server-name-header" class="px-4 h-12 flex items-center justify-between shadow-md font-bold text-lg border-b border-gray-900/50 relative">
+            <span id="server-name-text" class="truncate"></span>
+            <button id="server-settings-button" class="text-gray-400 hover:text-white">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
+            </button>
+            <div id="server-settings-dropdown" class="hidden absolute right-0 top-12 mt-1 w-56 bg-gray-900 rounded-md shadow-lg z-20">
+                <div class="py-1">
+                    <button id="invite-button" class="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Invite People</button>
+                    <div class="border-t border-gray-700 mx-2 my-1"></div>
+                    <button id="leave-server-button" class="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-700">Leave Server</button>
+                </div>
+            </div>
         </header>
         <nav id="channel-list" class="flex-1 p-2 space-y-1 overflow-y-auto">
           <!-- Channels rendered by JS -->
@@ -176,7 +186,7 @@
       
       <!-- Version Number -->
       <div class="absolute bottom-1 right-2 text-xs text-gray-500">
-          v1.3 <!-- Remember to update this version number! -->
+          v1.4 <!-- Remember to update this version number! -->
       </div>
 
 
@@ -228,6 +238,25 @@
                 <div class="bg-gray-800 p-4 rounded-md flex justify-end space-x-4">
                     <button type="button" id="cancel-profile-changes" class="text-gray-300 hover:text-white">Cancel</button>
                     <button type="submit" class="px-6 py-2 bg-blue-500 hover:bg-blue-600 rounded-md font-semibold">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Invite Modal -->
+    <div id="invite-modal" class="hidden fixed inset-0 bg-black/50 z-50 items-center justify-center">
+        <div class="bg-gray-700 rounded-lg p-6 w-full max-w-md" >
+            <h2 class="text-2xl font-bold text-center mb-1">Invite Friends to</h2>
+            <p id="invite-server-name" class="text-center text-sm text-gray-400 mb-4 truncate"></p>
+            <form id="invite-form">
+                <div class="mb-4">
+                    <label for="friend-code-input" class="text-xs font-bold uppercase text-gray-400">Friend Code (User ID)</label>
+                    <input id="friend-code-input" type="text" class="w-full bg-gray-800 border border-gray-900 rounded-md p-2 mt-1 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+                    <p id="invite-status-message" class="text-sm mt-2 h-4"></p>
+                </div>
+                <div class="bg-gray-800 p-4 rounded-md flex justify-end space-x-4">
+                     <button type="button" id="cancel-invite-button" class="text-gray-300 hover:text-white">Cancel</button>
+                     <button type="submit" class="px-6 py-2 bg-blue-500 hover:bg-blue-600 rounded-md font-semibold">Send Invite</button>
                 </div>
             </form>
         </div>
