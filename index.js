@@ -200,13 +200,30 @@ const signOut = () => auth.signOut().catch((error) => console.error("Sign out er
 // =================================================================================
 // UI Rendering Functions
 // =================================================================================
+
+/**
+ * Validates if a string is a valid HTTP/HTTPS URL.
+ * @param {string} string The string to validate.
+ * @returns {boolean} True if the string is a valid URL, false otherwise.
+ */
+const isValidHttpUrl = (string) => {
+    if (!string) return false;
+    try {
+        const newUrl = new URL(string);
+        return newUrl.protocol === 'http:' || newUrl.protocol === 'https:';
+    } catch (_) {
+        return false;
+    }
+};
+
 const renderUserInfo = () => {
   if (!currentUser) return;
   const userInfoPanels = document.querySelectorAll('.user-info-panel');
+  const avatarUrl = isValidHttpUrl(currentUser.photoURL) ? currentUser.photoURL : DEFAULT_AVATAR_SVG;
 
   const userInfoHTML = `
     <div class="relative mr-2">
-        <img src="${currentUser.photoURL}" onerror="this.onerror=null;this.src='${DEFAULT_AVATAR_SVG}';" alt="${currentUser.displayName}" class="w-10 h-10 rounded-full"/>
+        <img src="${avatarUrl}" alt="${currentUser.displayName}" class="w-10 h-10 rounded-full object-cover"/>
         <div class="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-gray-800 rounded-full"></div>
     </div>
     <div class="truncate">
@@ -249,10 +266,11 @@ const renderServers = (servers) => {
         const isActive = server.id === activeServerId;
         const serverIcon = document.createElement('div');
         serverIcon.className = "relative group mb-2";
+        const iconUrl = isValidHttpUrl(server.iconUrl) ? server.iconUrl : DEFAULT_AVATAR_SVG;
         serverIcon.innerHTML = `
             <div class="absolute left-0 h-0 w-1 bg-white rounded-r-full transition-all duration-200 ${isActive ? 'h-10' : 'group-hover:h-5'}"></div>
             <button class="flex items-center justify-center w-12 h-12 rounded-3xl transition-all duration-200 group-hover:rounded-2xl ${isActive ? 'bg-blue-500 rounded-2xl' : 'bg-gray-700 hover:bg-blue-500'} focus:outline-none">
-                <img src="${server.iconUrl}" onerror="this.onerror=null;this.src='${DEFAULT_AVATAR_SVG}';" alt="${server.name}" class="w-full h-full object-cover rounded-3xl group-hover:rounded-2xl transition-all duration-200" />
+                <img src="${iconUrl}" alt="${server.name}" class="w-full h-full object-cover rounded-3xl group-hover:rounded-2xl transition-all duration-200" />
             </button>
             <span class="absolute left-16 p-2 text-sm bg-gray-900 text-white rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10 pointer-events-none">${server.name}</span>
         `;
@@ -316,10 +334,11 @@ const renderFriends = (friends) => {
     friends.forEach(friend => {
         const friendEl = document.createElement('button');
         const isActive = activeView === 'home' && activeChannelId === getDmChannelId(friend.id);
+        const friendAvatarUrl = isValidHttpUrl(friend.photoURL) ? friend.photoURL : DEFAULT_AVATAR_SVG;
         friendEl.className = `flex items-center w-full px-2 py-1.5 text-left rounded-md transition-colors duration-150 ${isActive ? 'bg-gray-600 text-white' : 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-200'}`;
         friendEl.innerHTML = `
             <div class="relative mr-2">
-                <img src="${friend.photoURL}" onerror="this.onerror=null;this.src='${DEFAULT_AVATAR_SVG}';" alt="${friend.displayName}" class="w-8 h-8 rounded-full" data-userid="${friend.id}" />
+                <img src="${friendAvatarUrl}" alt="${friend.displayName}" class="w-8 h-8 rounded-full object-cover" data-userid="${friend.id}" />
                 <div class="absolute bottom-0 right-0 w-2.5 h-2.5 ${friend.status === 'online' ? 'bg-green-500' : 'bg-gray-500'} border-2 border-gray-800 rounded-full"></div>
             </div>
             <span class="font-medium truncate" data-userid="${friend.id}">${friend.displayName}</span>
@@ -361,15 +380,20 @@ const renderMessages = (messages) => {
             // Render a full message with the user header
             messageEl.className = 'flex p-4 hover:bg-gray-800/50 pt-6';
             const timestamp = msg.timestamp ? new Date(msg.timestamp.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'sending...';
+            const messageUserAvatar = isValidHttpUrl(msg.user.photoURL) ? msg.user.photoURL : DEFAULT_AVATAR_SVG;
+            const messageImage = msg.imageUrl && isValidHttpUrl(msg.imageUrl)
+                ? `<a href="${msg.imageUrl}" target="_blank" rel="noopener noreferrer" class="block mt-2"><img src="${msg.imageUrl}" alt="Uploaded content" class="rounded-lg max-w-xs max-h-64 object-cover"></a>`
+                : '';
+            
             messageEl.innerHTML = `
-                <img src="${msg.user.photoURL}" onerror="this.onerror=null;this.src='${DEFAULT_AVATAR_SVG}';" alt="${msg.user.displayName}" class="w-10 h-10 rounded-full mr-4 cursor-pointer" data-userid="${msg.user.uid}" />
+                <img src="${messageUserAvatar}" alt="${msg.user.displayName}" class="w-10 h-10 rounded-full mr-4 cursor-pointer object-cover" data-userid="${msg.user.uid}" />
                 <div>
                     <div class="flex items-baseline">
                         <span class="font-semibold text-white mr-2 cursor-pointer" data-userid="${msg.user.uid}">${msg.user.displayName}</span>
                         <span class="text-xs text-gray-500">${timestamp}</span>
                     </div>
                     ${msg.text ? `<p class="text-gray-200 whitespace-pre-wrap break-words">${msg.text}</p>` : ''}
-                    ${msg.imageUrl ? `<a href="${msg.imageUrl}" target="_blank" rel="noopener noreferrer" class="block mt-2"><img src="${msg.imageUrl}" alt="Uploaded content" class="rounded-lg max-w-xs max-h-64 object-cover"></a>` : ''}
+                    ${messageImage}
                 </div>
             `;
         }
@@ -399,10 +423,11 @@ const renderUsers = (users) => {
         const userEl = document.createElement('div');
         userEl.className = "flex items-center p-2 rounded-md hover:bg-gray-700/50 cursor-pointer";
         userEl.dataset.userid = user.id;
+        const userAvatarUrl = isValidHttpUrl(user.photoURL) ? user.photoURL : DEFAULT_AVATAR_SVG;
         userEl.innerHTML = `
             <div class="flex items-center pointer-events-none">
                 <div class="relative mr-3">
-                    <img src="${user.photoURL}" onerror="this.onerror=null;this.src='${DEFAULT_AVATAR_SVG}';" alt="${user.displayName}" class="w-8 h-8 rounded-full" />
+                    <img src="${userAvatarUrl}" alt="${user.displayName}" class="w-8 h-8 rounded-full object-cover" />
                     <div class="absolute bottom-0 right-0 w-2.5 h-2.5 ${user.status === 'online' ? 'bg-green-500' : 'bg-gray-500'} border-2 border-gray-800 rounded-full"></div>
                 </div>
                 <span class="text-sm font-medium text-gray-300">${user.displayName}</span>
@@ -646,10 +671,11 @@ const selectDmChannel = (friend) => {
     if(placeholderView) placeholderView.style.display = 'none';
     if(chatView) chatView.style.display = 'flex';
     if(userListAside) userListAside.style.display = 'none';
-
+    
+    const dmAvatarUrl = isValidHttpUrl(friend.photoURL) ? friend.photoURL : DEFAULT_AVATAR_SVG;
     if(chatHeader) chatHeader.innerHTML = `
         <div class="relative mr-2">
-            <img src="${friend.photoURL}" onerror="this.onerror=null;this.src='${DEFAULT_AVATAR_SVG}';" alt="${friend.displayName}" class="w-7 h-7 rounded-full" />
+            <img src="${dmAvatarUrl}" alt="${friend.displayName}" class="w-7 h-7 rounded-full object-cover" />
             <div class="absolute bottom-0 right-0 w-2 h-2 ${friend.status === 'online' ? 'bg-green-500' : 'bg-gray-500'} border border-gray-800 rounded-full"></div>
         </div>
         <h2 class="font-semibold text-lg text-white">${friend.displayName}</h2>
@@ -830,6 +856,11 @@ const handleUpdateProfile = async (e) => {
     const newAvatarUrl = profileAvatarInput.value.trim();
     if (!newUsername) return;
 
+    if (newAvatarUrl && !isValidHttpUrl(newAvatarUrl)) {
+        alert("The provided Avatar URL is not valid. Please enter a full, valid URL (e.g., https://example.com/image.png) or leave it blank.");
+        return;
+    }
+
     try {
         const user = auth.currentUser;
         await user.updateProfile({
@@ -951,7 +982,7 @@ const showUserProfile = async (userId) => {
         const userDoc = await db.collection('users').doc(userId).get();
         if (userDoc.exists) {
             const userData = userDoc.data();
-            avatarEl.src = userData.photoURL || DEFAULT_AVATAR_SVG;
+            avatarEl.src = isValidHttpUrl(userData.photoURL) ? userData.photoURL : DEFAULT_AVATAR_SVG;
             nameEl.textContent = `${userData.displayName}'s Profile`;
             friendCodeEl.textContent = userId;
             modal.style.display = 'flex';
