@@ -750,7 +750,7 @@ const handleUpdateProfile = async (e) => {
     e.preventDefault();
     const profileUsernameInput = document.getElementById('profile-username-input');
     const profileAvatarInput = document.getElementById('profile-avatar-input');
-    const settingsModal = document.getElementById('settings-modal');
+    const myProfileModal = document.getElementById('my-profile-modal');
 
     const newUsername = profileUsernameInput.value.trim();
     const newAvatarUrl = profileAvatarInput.value.trim();
@@ -773,7 +773,7 @@ const handleUpdateProfile = async (e) => {
         currentUser.photoURL = newAvatarUrl || currentUser.photoURL;
         renderUserInfo();
         
-        if (settingsModal) settingsModal.style.display = 'none';
+        if (myProfileModal) myProfileModal.style.display = 'none';
 
     } catch(error) {
         console.error("Error updating profile:", error);
@@ -990,6 +990,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const userListAside = document.getElementById('user-list-aside');
     const friendList = document.getElementById('friend-list');
     const settingsModal = document.getElementById('settings-modal');
+    const myProfileModal = document.getElementById('my-profile-modal');
     const attachFileButton = document.getElementById('attach-file-button');
     const imageUploadInput = document.getElementById('image-upload-input');
     const cancelImagePreviewButton = document.getElementById('cancel-image-preview');
@@ -1039,9 +1040,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Settings Modal Logic
-    const openSettingsModal = () => {
-        if (!currentUser || !settingsModal) return;
+    // My Profile Modal Logic
+    const openMyProfileModal = () => {
+        if (!currentUser || !myProfileModal) return;
         const profileUsernameInput = document.getElementById('profile-username-input');
         const profileAvatarInput = document.getElementById('profile-avatar-input');
         const friendCodeDisplay = document.getElementById('friend-code-display');
@@ -1050,19 +1051,45 @@ document.addEventListener('DOMContentLoaded', () => {
         if (profileAvatarInput) profileAvatarInput.value = currentUser.photoURL;
         if (friendCodeDisplay) friendCodeDisplay.textContent = currentUser.uid;
         
-        // Default to profile section
+        myProfileModal.style.display = 'flex';
+    };
+
+    document.querySelectorAll('.user-info-panel').forEach(button => {
+        button.addEventListener('click', openMyProfileModal);
+    });
+
+    if (myProfileModal) {
+        document.getElementById('close-my-profile-modal')?.addEventListener('click', () => {
+            myProfileModal.style.display = 'none';
+        });
+        myProfileModal.addEventListener('click', (e) => {
+            if (e.target === myProfileModal) {
+                myProfileModal.style.display = 'none';
+            }
+        });
+    }
+
+    // Settings Modal Logic
+    const openSettingsModal = () => {
+        if (!settingsModal) return;
+
+        // Default to appearance section
         document.querySelectorAll('.settings-section').forEach(el => el.classList.add('hidden'));
-        document.getElementById('profile-section')?.classList.remove('hidden');
+        document.getElementById('theme-section')?.classList.remove('hidden');
+
         document.querySelectorAll('.settings-nav-button').forEach(btn => {
             btn.classList.remove('bg-gray-700', 'text-white');
             btn.classList.add('text-gray-300', 'hover:bg-gray-700/50', 'hover:text-white');
         });
-        document.querySelector('.settings-nav-button[data-section="profile-section"]')?.classList.add('bg-gray-700', 'text-white');
-
+        const themeNavButton = document.querySelector('.settings-nav-button[data-section="theme-section"]');
+        if (themeNavButton) {
+            themeNavButton.classList.add('bg-gray-700', 'text-white');
+        }
+        
         settingsModal.style.display = 'flex';
     };
 
-    document.querySelectorAll('.user-info-panel, .settings-button').forEach(button => {
+    document.querySelectorAll('.settings-button').forEach(button => {
         button.addEventListener('click', openSettingsModal);
     });
 
