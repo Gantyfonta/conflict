@@ -58,6 +58,10 @@
         	border: 1px solid var(--color-gray-600);
             border-radius: 50%;
         }
+        .role-dragging {
+            opacity: 0.5;
+            background-color: var(--color-gray-600);
+        }
     </style>
     <script>
       tailwind.config = {
@@ -301,7 +305,7 @@
       
       <!-- Version Number -->
       <div class="absolute bottom-1 right-2 text-xs text-gray-500">
-          v2.6 <!-- Always update this version number on every change! -->
+          v2.7
       </div>
 
 
@@ -365,7 +369,7 @@
             <nav class="w-64 bg-gray-900 p-4 space-y-2 flex flex-col">
                 <div class="flex-1">
                     <h3 class="px-2 text-xs font-bold uppercase text-gray-400">User Settings</h3>
-                    <button data-section="theme-section" class="settings-nav-button w-full text-left px-2 py-1.5 rounded-md text-gray-300 hover:bg-gray-700/50 hover:text-white">Appearance</button>
+                    <button data-section="theme-section" class="settings-nav-button w-full text-left px-2 py-1.5 rounded-md text-gray-300 hover:bg-gray-700/50 hover:text-white bg-gray-700 text-white">Appearance</button>
                     <div class="border-t border-gray-700 mx-2 my-2"></div>
                     <button class="signout-button w-full text-left px-2 py-1.5 rounded-md text-gray-300 hover:bg-gray-700/50 hover:text-white">Sign Out</button>
                 </div>
@@ -421,17 +425,32 @@
             <nav class="w-64 bg-gray-900 p-4 space-y-2 flex flex-col">
                 <div class="flex-1">
                     <h3 id="settings-server-name" class="px-2 mb-2 font-bold text-white truncate">Server Settings</h3>
+                    <button data-section="overview-section" class="server-settings-nav-button w-full text-left px-2 py-1.5 rounded-md text-gray-300 hover:bg-gray-700/50 hover:text-white bg-gray-700 text-white">Overview</button>
                     <div class="border-t border-gray-700 mx-2 my-2"></div>
                     <h3 class="px-2 text-xs font-bold uppercase text-gray-400">User Management</h3>
                     <button data-section="roles-section" class="server-settings-nav-button w-full text-left px-2 py-1.5 rounded-md text-gray-300 hover:bg-gray-700/50 hover:text-white">Roles</button>
+                    <button data-section="members-section" class="server-settings-nav-button w-full text-left px-2 py-1.5 rounded-md text-gray-300 hover:bg-gray-700/50 hover:text-white">Members</button>
                 </div>
             </nav>
             <!-- Content -->
             <div class="flex-1 flex flex-col bg-gray-700">
                 <main class="flex-1 p-8 overflow-y-auto">
+                    <!-- Overview Section -->
+                    <div id="overview-section" class="server-settings-section">
+                         <h2 class="text-2xl font-bold mb-6">Server Overview</h2>
+                         <form id="server-overview-form">
+                             <div class="mb-4">
+                                <label for="server-settings-name-input" class="text-xs font-bold uppercase text-gray-400">Server Name</label>
+                                <input id="server-settings-name-input" type="text" class="w-full bg-gray-800 border border-gray-900 rounded-md p-2 mt-1 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+                             </div>
+                             <button type="submit" class="px-6 py-2 bg-blue-500 hover:bg-blue-600 rounded-md font-semibold">Save Changes</button>
+                             <span id="server-settings-status" class="ml-4 text-sm text-green-400"></span>
+                         </form>
+                    </div>
                     <!-- Roles Section -->
-                    <div id="roles-section" class="server-settings-section">
+                    <div id="roles-section" class="server-settings-section hidden">
                          <h2 class="text-2xl font-bold mb-6">Roles</h2>
+                         <p class="text-sm text-gray-400 mb-4">Drag and drop roles to reorder their hierarchy.</p>
                          <div class="bg-gray-800 p-4 rounded-md">
                             <div id="roles-list" class="space-y-2 mb-4">
                                 <!-- Roles will be rendered here -->
@@ -445,6 +464,13 @@
                                 </div>
                             </form>
                          </div>
+                    </div>
+                    <!-- Members Section -->
+                    <div id="members-section" class="server-settings-section hidden">
+                        <h2 class="text-2xl font-bold mb-6">Members</h2>
+                        <div id="server-members-list" class="space-y-1">
+                            <!-- Members and their roles will be rendered here -->
+                        </div>
                     </div>
                 </main>
                 <footer class="p-4 flex justify-end bg-gray-800/50">

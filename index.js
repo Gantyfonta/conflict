@@ -47,12 +47,16 @@ let activeView = 'servers'; // 'servers' or 'home'
 let activeServerId = null;
 let activeChannelId = null; // Can be a server channel ID or a DM channel ID
 let activeServerRoles = {};
+let activeServerRoleOrder = [];
+let activeServerMembers = {}; // { userId: { roles: [...] } }
+let allServerUsers = []; // { id, displayName, photoURL, status }
 let stagedFile = null;
 let messageUnsubscribe = () => {};
 let channelUnsubscribe = () => {};
 let usersUnsubscribe = () => {};
 let serversUnsubscribe = () => {};
 let friendsUnsubscribe = () => {};
+let draggedRoleId = null;
 
 // =================================================================================
 // Authentication
@@ -362,6 +366,9 @@ const renderMessages = (messages) => {
         const messageEl = document.createElement('div');
         const currentTimestamp = msg.timestamp ? msg.timestamp.toDate() : new Date();
 
+        const highestRole = getHighestRole(msg.user.uid);
+        const roleColor = highestRole ? highestRole.color : 'inherit';
+
         // Check if this message should be grouped with the previous one
         const shouldGroup = 
             msg.user.uid === lastMessageUid &&
@@ -389,7 +396,7 @@ const renderMessages = (messages) => {
                 <img src="${messageUserAvatar}" alt="${msg.user.displayName}" class="w-10 h-10 rounded-full mr-4 cursor-pointer object-cover" data-userid="${msg.user.uid}" />
                 <div>
                     <div class="flex items-baseline">
-                        <span class="font-semibold text-white mr-2 cursor-pointer" data-userid="${msg.user.uid}">${msg.user.displayName}</span>
+                        <span class="font-semibold mr-2 cursor-pointer" style="color: ${roleColor};" data-userid="${msg.user.uid}">${msg.user.displayName}</span>
                         <span class="text-xs text-gray-500">${timestamp}</span>
                     </div>
                     ${msg.text ? `<p class="text-gray-200 whitespace-pre-wrap break-words">${msg.text}</p>` : ''}
@@ -423,38 +430,88 @@ const renderUsers = (users) => {
         const userEl = document.createElement('div');
         userEl.className = "flex items-center p-2 rounded-md hover:bg-gray-700/50 cursor-pointer";
         userEl.dataset.userid = user.id;
+
+        const highestRole = getHighestRole(user.id);
+        const roleColor = highestRole ? highestRole.color : 'inherit';
         const userAvatarUrl = isValidHttpUrl(user.photoURL) ? user.photoURL : DEFAULT_AVATAR_SVG;
+
         userEl.innerHTML = `
             <div class="flex items-center pointer-events-none">
                 <div class="relative mr-3">
                     <img src="${userAvatarUrl}" alt="${user.displayName}" class="w-8 h-8 rounded-full object-cover" />
                     <div class="absolute bottom-0 right-0 w-2.5 h-2.5 ${user.status === 'online' ? 'bg-green-500' : 'bg-gray-500'} border-2 border-gray-800 rounded-full"></div>
                 </div>
-                <span class="text-sm font-medium text-gray-300">${user.displayName}</span>
+                <span class="text-sm font-medium" style="color: ${roleColor};">${user.displayName}</span>
             </div>
         `;
         userListAside.appendChild(userEl);
     });
 }
 
-const renderRoles = (roles) => {
+const renderRoles = () => {
     const rolesList = document.getElementById('roles-list');
     if (!rolesList) return;
 
     rolesList.innerHTML = '';
-    Object.entries(roles).forEach(([id, role]) => {
+    activeServerRoleOrder.forEach(roleId => {
+        const role = activeServerRoles[roleId];
+        if (!role) return;
+
         const roleEl = document.createElement('div');
         roleEl.className = 'flex items-center justify-between bg-gray-700 p-2 rounded-md';
+        roleEl.dataset.roleId = roleId;
+        roleEl.draggable = true;
+
         roleEl.innerHTML = `
-            <div class="flex items-center">
+            <div class="flex items-center pointer-events-none">
+                 <svg class="w-5 h-5 mr-3 text-gray-400 cursor-grab" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
                 <div class="w-4 h-4 rounded-full mr-3" style="background-color: ${role.color};"></div>
                 <span class="font-semibold text-white">${role.name}</span>
             </div>
         `;
-        // Add edit/delete buttons in a future update
         rolesList.appendChild(roleEl);
     });
-}
+};
+
+const renderServerMembers = () => {
+    const membersList = document.getElementById('server-members-list');
+    if (!membersList) return;
+
+    membersList.innerHTML = '';
+    allServerUsers.forEach(user => {
+        const memberData = activeServerMembers[user.id] || { roles: [] };
+        const userAvatarUrl = isValidHttpUrl(user.photoURL) ? user.photoURL : DEFAULT_AVATAR_SVG;
+        const memberEl = document.createElement('div');
+        memberEl.className = 'p-2 rounded-md hover:bg-gray-700/50';
+
+        let rolesCheckboxesHTML = activeServerRoleOrder.map(roleId => {
+            const role = activeServerRoles[roleId];
+            if (!role || roleId === 'owner' || roleId === 'default') return ''; // Don't allow assigning owner/default
+            const isChecked = memberData.roles.includes(roleId);
+            return `
+                <label class="flex items-center space-x-2 cursor-pointer">
+                    <input type="checkbox" data-userid="${user.id}" data-roleid="${roleId}" ${isChecked ? 'checked' : ''} class="form-checkbox h-4 w-4 text-blue-500 bg-gray-900 border-gray-600 rounded focus:ring-blue-500">
+                    <div class="w-3 h-3 rounded-full" style="background-color: ${role.color};"></div>
+                    <span>${role.name}</span>
+                </label>
+            `;
+        }).join('');
+
+        memberEl.innerHTML = `
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <img src="${userAvatarUrl}" alt="${user.displayName}" class="w-8 h-8 rounded-full object-cover mr-3">
+                    <span class="font-medium text-white">${user.displayName}</span>
+                </div>
+            </div>
+            <div class="pl-11 pt-2 space-y-1">
+                ${rolesCheckboxesHTML}
+            </div>
+        `;
+        membersList.appendChild(memberEl);
+    });
+};
+
 
 // =================================================================================
 // Data Handling & State Management
@@ -462,6 +519,20 @@ const renderRoles = (roles) => {
 const getDmChannelId = (friendId) => {
     return [currentUser.uid, friendId].sort().join('_');
 };
+
+const getHighestRole = (userId) => {
+    if (activeView !== 'servers' || !activeServerMembers[userId]) {
+        return null;
+    }
+    const userRoleIds = activeServerMembers[userId].roles || [];
+    for (const roleId of activeServerRoleOrder) {
+        if (userRoleIds.includes(roleId)) {
+            return activeServerRoles[roleId];
+        }
+    }
+    return activeServerRoles['default']; // Fallback to default role
+};
+
 
 const loadServers = () => {
     if (serversUnsubscribe) serversUnsubscribe();
@@ -519,6 +590,9 @@ const selectHome = () => {
     activeServerId = null;
     activeChannelId = null;
     activeServerRoles = {};
+    activeServerRoleOrder = [];
+    activeServerMembers = {};
+    allServerUsers = [];
 
     if (messageUnsubscribe) messageUnsubscribe();
     if (channelUnsubscribe) channelUnsubscribe();
@@ -593,16 +667,27 @@ const selectServer = async (serverId) => {
     usersUnsubscribe = serverRef.onSnapshot(async (doc) => {
         if (doc.exists) {
             const serverData = doc.data();
-            const memberUIDs = serverData.members || [];
             activeServerRoles = serverData.roles || {};
-            renderRoles(activeServerRoles); // Update server settings modal UI
+            activeServerRoleOrder = serverData.roleOrder || Object.keys(activeServerRoles);
+            document.getElementById('server-settings-name-input').value = serverData.name;
+            renderRoles();
             
+            const membersSnapshot = await serverRef.collection('members').get();
+            activeServerMembers = {};
+            membersSnapshot.forEach(mdoc => {
+                activeServerMembers[mdoc.id] = mdoc.data();
+            });
+
+            const memberUIDs = serverData.members || [];
             if (memberUIDs.length > 0) {
                 const userDocs = await db.collection('users').where(firebase.firestore.FieldPath.documentId(), 'in', memberUIDs).get();
-                const users = userDocs.docs.map(d => ({ id: d.id, ...d.data() }));
-                renderUsers(users);
+                allServerUsers = userDocs.docs.map(d => ({ id: d.id, ...d.data() }));
+                renderUsers(allServerUsers);
+                renderServerMembers();
             } else {
+                allServerUsers = [];
                 renderUsers([]);
+                renderServerMembers();
             }
         }
     });
@@ -692,59 +777,85 @@ const selectDmChannel = (friend) => {
     loadFriends();
 };
 
+const sendMessage = async (messageData) => {
+    if (activeView === 'servers' && activeServerId && activeChannelId) {
+        await db.collection('servers').doc(activeServerId).collection('channels').doc(activeChannelId).collection('messages').add(messageData);
+    } else if (activeView === 'home' && activeChannelId) {
+        await db.collection('dms').doc(activeChannelId).collection('messages').add(messageData);
+    }
+}
 
 const handleSendMessage = async (e) => {
-  e.preventDefault();
-  const messageInput = document.getElementById('message-input');
-  const sendButton = document.getElementById('send-button');
-  const text = messageInput.value.trim();
+    e.preventDefault();
+    const messageInput = document.getElementById('message-input');
+    const sendButton = document.getElementById('send-button');
+    let text = messageInput.value.trim();
   
-  if ((!text && !stagedFile) || !currentUser) return;
+    if ((!text && !stagedFile) || !currentUser) return;
 
-  sendButton.disabled = true;
+    sendButton.disabled = true;
 
-  let imageUrl = null;
-
-  if (stagedFile) {
-    try {
-        const filePath = `chat-images/${currentUser.uid}/${Date.now()}_${stagedFile.name}`;
-        const fileRef = storage.ref(filePath);
-        const uploadTask = await fileRef.put(stagedFile);
-        imageUrl = await uploadTask.ref.getDownloadURL();
-    } catch (error) {
-        console.error("Error uploading image:", error);
-        alert("Failed to upload image. Please try again.");
-        sendButton.disabled = false;
-        return;
+    // Command handling
+    if (text.startsWith('/')) {
+        let commandResultText = null;
+        if (text === '/coinflip') {
+            commandResultText = Math.random() < 0.5 ? 'Heads' : 'Tails';
+        } else if (text === '/dice') {
+            commandResultText = `${Math.floor(Math.random() * 6) + 1}`;
+        }
+        
+        if (commandResultText) {
+            const messageData = {
+                text: commandResultText,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                user: {
+                    uid: currentUser.uid,
+                    displayName: currentUser.displayName,
+                    photoURL: currentUser.photoURL,
+                }
+            };
+            await sendMessage(messageData);
+            messageInput.value = '';
+            cancelImagePreview();
+            messageInput.dispatchEvent(new Event('input')); // To update send button state
+            return;
+        }
     }
-  }
+    
+    try {
+        let imageUrl = null;
+        if (stagedFile) {
+            const filePath = `chat-images/${currentUser.uid}/${Date.now()}_${stagedFile.name}`;
+            const fileRef = storage.ref(filePath);
+            const uploadTask = await fileRef.put(stagedFile);
+            imageUrl = await uploadTask.ref.getDownloadURL();
+        }
 
-  const messageData = {
-      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-      user: {
-          uid: currentUser.uid,
-          displayName: currentUser.displayName,
-          photoURL: currentUser.photoURL,
-      }
-  };
+        const messageData = {
+            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            user: {
+                uid: currentUser.uid,
+                displayName: currentUser.displayName,
+                photoURL: currentUser.photoURL,
+            }
+        };
 
-  if (text) {
-      messageData.text = text;
-  }
-  if (imageUrl) {
-      messageData.imageUrl = imageUrl;
-  }
-  
-  if (activeView === 'servers' && activeServerId && activeChannelId) {
-      db.collection('servers').doc(activeServerId).collection('channels').doc(activeChannelId).collection('messages').add(messageData);
-  } else if (activeView === 'home' && activeChannelId) {
-      db.collection('dms').doc(activeChannelId).collection('messages').add(messageData);
-  }
+        if (text) messageData.text = text;
+        if (imageUrl) messageData.imageUrl = imageUrl;
+        
+        await sendMessage(messageData);
+        
+        // Reset input and preview on success
+        messageInput.value = '';
+        cancelImagePreview();
 
-  // Reset input and preview
-  messageInput.value = '';
-  cancelImagePreview();
-  sendButton.disabled = true;
+    } catch (error) {
+        console.error("Error sending message:", error);
+        alert("Failed to send message. Please try again.");
+    } finally {
+        // Re-evaluate button state
+        messageInput.dispatchEvent(new Event('input', { bubbles: true }));
+    }
 };
 
 const handleCreateServer = async (e) => {
@@ -763,10 +874,14 @@ const handleCreateServer = async (e) => {
             roles: {
                 'owner': { name: 'Owner', color: '#ffc107' },
                 'default': { name: '@everyone', color: '#99aab5' }
-            }
+            },
+            roleOrder: ['owner', 'default']
         });
         await newServerRef.collection('channels').doc('general').set({
             name: 'general'
+        });
+        await newServerRef.collection('members').doc(currentUser.uid).set({
+            roles: ['owner']
         });
         
         serverNameInput.value = '';
@@ -804,7 +919,8 @@ const handleCreateRole = async (e) => {
         const roleId = `role_${Date.now()}`;
         
         await serverRef.update({
-            [`roles.${roleId}`]: { name: roleName, color: roleColor }
+            [`roles.${roleId}`]: { name: roleName, color: roleColor },
+            roleOrder: firebase.firestore.FieldValue.arrayUnion(roleId)
         });
         
         roleNameInput.value = '';
@@ -891,11 +1007,13 @@ async function deleteServer(serverRef) {
   for (const channelDoc of channelsSnapshot.docs) {
     const messagesSnapshot = await channelDoc.ref.collection('messages').get();
     const batch = db.batch();
-    messagesSnapshot.forEach(msgDoc => {
-      batch.delete(msgDoc.ref);
-    });
+    messagesSnapshot.forEach(msgDoc => batch.delete(msgDoc.ref));
     await batch.commit();
     await channelDoc.ref.delete();
+  }
+  const membersSnapshot = await serverRef.collection('members').get();
+  for (const memberDoc of membersSnapshot.docs) {
+      await memberDoc.ref.delete();
   }
   await serverRef.delete();
   console.log(`Server ${serverRef.id} and all its content have been deleted.`);
@@ -914,6 +1032,7 @@ const handleLeaveServer = async () => {
             await serverRef.update({
                 members: firebase.firestore.FieldValue.arrayRemove(currentUser.uid)
             });
+            await serverRef.collection('members').doc(currentUser.uid).delete();
 
             const updatedServerDoc = await serverRef.get();
             if (updatedServerDoc.exists) {
@@ -956,6 +1075,7 @@ const handleInviteFriend = async (e) => {
         await serverRef.update({
             members: firebase.firestore.FieldValue.arrayUnion(friendId)
         });
+        await serverRef.collection('members').doc(friendId).set({ roles: ['default'] });
 
         inviteStatusMessage.textContent = `Invite sent to ${userDoc.data().displayName}!`;
         inviteStatusMessage.className = 'text-sm mt-2 h-4 text-green-400';
@@ -1131,6 +1251,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const cancelImagePreviewButton = document.getElementById('cancel-image-preview');
     const cancelCreateChannelButton = document.getElementById('cancel-create-channel');
     const createChannelModal = document.getElementById('create-channel-modal');
+    const serverOverviewForm = document.getElementById('server-overview-form');
 
     // Attach event listeners
     document.getElementById('login-button')?.addEventListener('click', signInWithGoogle);
@@ -1231,6 +1352,78 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     if (serverSettingsModal) {
         document.getElementById('close-server-settings-modal')?.addEventListener('click', () => serverSettingsModal.style.display = 'none');
+        document.querySelectorAll('.server-settings-nav-button').forEach(button => {
+            button.addEventListener('click', () => {
+                const sectionId = button.dataset.section;
+                document.querySelectorAll('.server-settings-section').forEach(el => el.classList.add('hidden'));
+                document.getElementById(sectionId)?.classList.remove('hidden');
+                document.querySelectorAll('.server-settings-nav-button').forEach(btn => btn.classList.remove('bg-gray-700', 'text-white'));
+                button.classList.add('bg-gray-700', 'text-white');
+            });
+        });
+
+        if (serverOverviewForm) serverOverviewForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const newName = document.getElementById('server-settings-name-input').value.trim();
+            const statusEl = document.getElementById('server-settings-status');
+            if (newName && activeServerId) {
+                await db.collection('servers').doc(activeServerId).update({ name: newName });
+                statusEl.textContent = 'Saved!';
+                setTimeout(() => { statusEl.textContent = ''; }, 2000);
+            }
+        });
+
+        // Role Drag and Drop
+        const rolesList = document.getElementById('roles-list');
+        rolesList.addEventListener('dragstart', e => {
+            draggedRoleId = e.target.dataset.roleId;
+            e.target.classList.add('role-dragging');
+        });
+        rolesList.addEventListener('dragend', e => {
+            e.target.classList.remove('role-dragging');
+        });
+        rolesList.addEventListener('dragover', e => {
+            e.preventDefault();
+            const draggingEl = document.querySelector('.role-dragging');
+            const afterElement = [...rolesList.querySelectorAll('[draggable="true"]:not(.role-dragging)')].reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = e.clientY - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+
+            if (afterElement == null) {
+                rolesList.appendChild(draggingEl);
+            } else {
+                rolesList.insertBefore(draggingEl, afterElement);
+            }
+        });
+        rolesList.addEventListener('drop', async e => {
+            e.preventDefault();
+            const newOrder = [...rolesList.querySelectorAll('[data-role-id]')].map(el => el.dataset.roleId);
+            await db.collection('servers').doc(activeServerId).update({ roleOrder: newOrder });
+            activeServerRoleOrder = newOrder;
+        });
+
+        // Member Role Assignment
+        const membersListContainer = document.getElementById('members-section');
+        membersListContainer.addEventListener('change', async (e) => {
+            if (e.target.type === 'checkbox') {
+                const userId = e.target.dataset.userid;
+                const roleId = e.target.dataset.roleid;
+                const memberRef = db.collection('servers').doc(activeServerId).collection('members').doc(userId);
+
+                if (e.target.checked) {
+                    await memberRef.update({ roles: firebase.firestore.FieldValue.arrayUnion(roleId) });
+                } else {
+                    await memberRef.update({ roles: firebase.firestore.FieldValue.arrayRemove(roleId) });
+                }
+            }
+        });
+
     }
 
     if (serverOptionsButton) serverOptionsButton.addEventListener('click', (e) => {
