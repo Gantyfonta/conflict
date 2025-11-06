@@ -1032,7 +1032,7 @@ const handleSendMessage = async (e) => {
     e.preventDefault();
     const messageInput = document.getElementById('message-input');
     const sendButton = document.getElementById('send-button');
-    let text = messageInput.value.trim();
+    const text = messageInput.value.trim();
   
     if ((!text && !stagedFile) || !currentUser) return;
 
@@ -1080,6 +1080,7 @@ const handleSendMessage = async (e) => {
         if (commandResultText) {
             const messageData = {
                 text: commandResultText,
+                imageUrl: null,
                 timestamp: firebase.firestore.FieldValue.serverTimestamp(),
                 user: {
                     uid: currentUser.uid,
@@ -1105,6 +1106,8 @@ const handleSendMessage = async (e) => {
         }
 
         const messageData = {
+            text: text, // Always include text, even if it's an empty string
+            imageUrl: imageUrl, // Include imageUrl, which can be null
             timestamp: firebase.firestore.FieldValue.serverTimestamp(),
             user: {
                 uid: currentUser.uid,
@@ -1112,9 +1115,6 @@ const handleSendMessage = async (e) => {
                 photoURL: currentUser.photoURL,
             }
         };
-
-        if (text) messageData.text = text;
-        if (imageUrl) messageData.imageUrl = imageUrl;
         
         await sendMessage(messageData);
         
@@ -1124,7 +1124,7 @@ const handleSendMessage = async (e) => {
 
     } catch (error) {
         console.error("Error sending message:", error);
-        alert("Failed to send message. Please try again.");
+        alert("Failed to send message. Please check your network connection and Firebase Storage rules.");
     } finally {
         // Re-evaluate button state
         messageInput.dispatchEvent(new Event('input', { bubbles: true }));
