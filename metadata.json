@@ -2,6 +2,7 @@
   "name": "Conflict",
   "description": "A Discord-like chat application where users can join rooms and talk to other people in real-time. Powered by Firebase.",
   "requestFramePermissions": [
-    "microphone"
+    "microphone",
+    "camera"
   ]
 }

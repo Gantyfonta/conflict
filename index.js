@@ -313,6 +313,12 @@ const adminPanelHTML = `
 </html>
 `;
 
+const MIC_ON_SVG = `<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>`;
+const MIC_OFF_SVG = `<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.08V5c0-1.657 1.343-3 3-3s3 1.343 3 3v.08m-6 0c0 1.657-1.343 3-3 3s-3-1.343-3-3v0m-1 8.917c1.333.604 2.89.917 4.5.917 1.61 0 3.167-.313 4.5-.917m-9 0v-1c0-2.21 1.79-4 4-4s4 1.79 4 4v1m-6 .08h.08a4.992 4.992 0 01-4.16 0H6"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3l18 18"></path></svg>`;
+const CAM_ON_SVG = `<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>`;
+const CAM_OFF_SVG = `<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3l18 18"></path></svg>`;
+const HANGUP_SVG = `<svg class="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17.218,2.282a1.042,1.042,0,0,0-1.474,0l-1.7,1.7-2.31-2.31a3.03,3.03,0,0,0-4.286,0L2.282,6.839a3.03,3.03,0,0,0,0,4.286l3.3,3.3-2.24,2.24a1.042,1.042,0,0,0,0,1.474l3.78,3.78a1.042,1.042,0,0,0,1.474,0l2.24-2.24,3.3,3.3a3.03,3.03,0,0,0,4.286,0l4.834-4.834a3.03,3.03,0,0,0,0-4.286L17.218,2.282Z"></path></svg>`;
+
 
 // =================================================================================
 // App State
@@ -341,7 +347,7 @@ let currentCallUnsubscribe = () => {};
 // WebRTC State
 let peerConnection;
 let localStream;
-let remoteStream;
+let remoteStream = new MediaStream();
 let activeCallData = null;
 const iceServers = {
   iceServers: [
@@ -1082,7 +1088,7 @@ const selectDmChannel = async (friend) => {
                 <h2 class="font-semibold text-lg text-white">${friend.displayName}</h2>
             </div>
             <button id="start-call-button" class="ml-auto text-gray-400 hover:text-white p-1 rounded-full hover:bg-gray-600">
-                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"></path></svg>
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 5.106A1 1 0 0116 6v8a1 1 0 01-1.447.894L12 12.828V7.172l2.553-1.932z"></path></svg>
             </button>
         `;
         document.getElementById('start-call-button').onclick = () => startCall(friend);
@@ -1504,8 +1510,40 @@ const cancelFilePreview = () => {
 };
 
 // =================================================================================
-// WebRTC Voice Call Functions
+// WebRTC Video Call Functions
 // =================================================================================
+
+const toggleMute = () => {
+    if (!localStream) return;
+    const audioTrack = localStream.getAudioTracks()[0];
+    const micButton = document.getElementById('toggle-mic-button');
+    if (audioTrack && micButton) {
+        audioTrack.enabled = !audioTrack.enabled;
+        const isMuted = !audioTrack.enabled;
+        micButton.dataset.muted = isMuted;
+        micButton.setAttribute('aria-label', isMuted ? 'Unmute microphone' : 'Mute microphone');
+        micButton.classList.toggle('bg-red-500', isMuted);
+        micButton.classList.toggle('hover:bg-red-600', isMuted);
+        micButton.classList.toggle('bg-gray-600/80', !isMuted);
+        micButton.innerHTML = isMuted ? MIC_OFF_SVG : MIC_ON_SVG;
+    }
+};
+
+const toggleCamera = () => {
+    if (!localStream) return;
+    const videoTrack = localStream.getVideoTracks()[0];
+    const camButton = document.getElementById('toggle-camera-button');
+    if (videoTrack && camButton) {
+        videoTrack.enabled = !videoTrack.enabled;
+        const isEnabled = videoTrack.enabled;
+        camButton.dataset.enabled = isEnabled;
+        camButton.setAttribute('aria-label', isEnabled ? 'Turn off camera' : 'Turn on camera');
+        camButton.classList.toggle('bg-red-500', !isEnabled);
+        camButton.classList.toggle('hover:bg-red-600', !isEnabled);
+        camButton.classList.toggle('bg-gray-600/80', isEnabled);
+        camButton.innerHTML = isEnabled ? CAM_ON_SVG : CAM_OFF_SVG;
+    }
+};
 
 const setupCallListener = () => {
     if (callListenerUnsubscribe) callListenerUnsubscribe();
@@ -1521,22 +1559,36 @@ const setupCallListener = () => {
 };
 
 const handleIncomingCall = async (callData) => {
-    if (activeCallData) return; // Already in a call
+    if (activeCallData) {
+        // If already in a call, automatically decline.
+        const callRef = db.collection('calls').doc(callData.id);
+        await callRef.update({ status: 'declined' });
+        return;
+    }
     activeCallData = callData;
     const callerDoc = await db.collection('users').doc(callData.callerId).get();
     const caller = callerDoc.data();
-
     showCallUI('incoming', caller);
+
+    // Set up a listener to hang up if the caller cancels
+    currentCallUnsubscribe = db.collection('calls').doc(callData.id).onSnapshot((snapshot) => {
+        if (!snapshot.exists || snapshot.data().status === 'ended') {
+            console.log("Call was cancelled by caller or ended.");
+            hangUp();
+        }
+    });
 };
+
 
 const startCall = async (friend) => {
     if (activeCallData) return alert("You are already in a call.");
     
     try {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        document.getElementById('local-video').srcObject = localStream;
     } catch (error) {
-        console.error("Could not get microphone access:", error);
-        alert("Microphone access is required for voice calls.");
+        console.error("Could not get media devices:", error);
+        alert("Camera and microphone access are required for video calls.");
         return;
     }
 
@@ -1560,9 +1612,10 @@ const startCall = async (friend) => {
     };
     
     peerConnection.ontrack = event => {
-        const remoteAudio = document.getElementById('remote-audio');
-        if (event.streams && event.streams[0]) {
-            remoteAudio.srcObject = event.streams[0];
+        const remoteVideo = document.getElementById('remote-video');
+        remoteStream.addTrack(event.track);
+        if (remoteVideo.srcObject !== remoteStream) {
+            remoteVideo.srcObject = remoteStream;
         }
     };
 
@@ -1570,17 +1623,26 @@ const startCall = async (friend) => {
     await peerConnection.setLocalDescription(offerDescription);
 
     const offer = { sdp: offerDescription.sdp, type: offerDescription.type };
-    await callRef.set({ ...activeCallData, offer });
-
-    currentCallUnsubscribe = callRef.onSnapshot(async (snapshot) => {
+    
+    await callRef.set({
+        ...activeCallData,
+        offer,
+    });
+    
+    // Listen for answer
+    currentCallUnsubscribe = callRef.onSnapshot(async snapshot => {
         const data = snapshot.data();
+        if (!data) return;
         if (data.answer && !peerConnection.currentRemoteDescription) {
             const answerDescription = new RTCSessionDescription(data.answer);
             await peerConnection.setRemoteDescription(answerDescription);
-            await callRef.update({ status: 'active' });
-            showCallUI('active', friend);
         }
-        if(data.status === 'ended' || !data.status) {
+        if (data.status === 'connected' && activeCallData.status !== 'connected') {
+            activeCallData.status = 'connected';
+            const calleeDoc = await db.collection('users').doc(data.calleeId).get();
+            showCallUI('connected', calleeDoc.data());
+        }
+        if (data.status === 'declined' || data.status === 'ended') {
             await hangUp();
         }
     });
@@ -1596,46 +1658,55 @@ const startCall = async (friend) => {
 };
 
 const answerCall = async () => {
-    const callRef = db.collection('calls').doc(activeCallData.id);
-    const callerDoc = await db.collection('users').doc(activeCallData.callerId).get();
-    const caller = callerDoc.data();
-    showCallUI('connecting', caller);
-    
+    if (!activeCallData) return;
     try {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        document.getElementById('local-video').srcObject = localStream;
     } catch (error) {
-        console.error("Could not get microphone access:", error);
-        alert("Microphone access is required for voice calls.");
-        await hangUp();
+        console.error("Could not get media devices:", error);
+        alert("Camera and microphone access are required for video calls.");
         return;
     }
     
+    const callRef = db.collection('calls').doc(activeCallData.id);
+    const callerDoc = await db.collection('users').doc(activeCallData.callerId).get();
+    
+    showCallUI('connected', callerDoc.data());
+
     peerConnection = new RTCPeerConnection(iceServers);
     localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-
+    
     peerConnection.onicecandidate = event => {
         if (event.candidate) {
             callRef.collection('calleeCandidates').add(event.candidate.toJSON());
         }
     };
-
+    
     peerConnection.ontrack = event => {
-        const remoteAudio = document.getElementById('remote-audio');
-        if (event.streams && event.streams[0]) {
-            remoteAudio.srcObject = event.streams[0];
+        const remoteVideo = document.getElementById('remote-video');
+        remoteStream.addTrack(event.track);
+        if (remoteVideo.srcObject !== remoteStream) {
+            remoteVideo.srcObject = remoteStream;
         }
     };
 
     const callDoc = await callRef.get();
-    const offerDescription = callDoc.data().offer;
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(offerDescription));
-
+    const offerDescription = new RTCSessionDescription(callDoc.data().offer);
+    await peerConnection.setRemoteDescription(offerDescription);
+    
     const answerDescription = await peerConnection.createAnswer();
     await peerConnection.setLocalDescription(answerDescription);
-
+    
     const answer = { type: answerDescription.type, sdp: answerDescription.sdp };
-    await callRef.update({ answer, status: 'active' });
-    showCallUI('active', caller);
+    await callRef.update({ answer, status: 'connected' });
+    
+    if (currentCallUnsubscribe) currentCallUnsubscribe();
+    currentCallUnsubscribe = callRef.onSnapshot(snapshot => {
+        const data = snapshot.data();
+        if (data?.status === 'ended') {
+            hangUp();
+        }
+    });
 
     callRef.collection('callerCandidates').onSnapshot(snapshot => {
         snapshot.docChanges().forEach(change => {
@@ -1645,462 +1716,354 @@ const answerCall = async () => {
             }
         });
     });
+};
 
-    currentCallUnsubscribe = callRef.onSnapshot(async (snapshot) => {
-         const data = snapshot.data();
-         if(data.status === 'ended' || !data.status) {
-             await hangUp();
-         }
-    });
+const declineCall = async () => {
+    if (!activeCallData) return;
+    const callRef = db.collection('calls').doc(activeCallData.id);
+    await callRef.update({ status: 'declined' });
+    await hangUp();
+};
+
+const showCallUI = (type, peer) => {
+    const videoCallView = document.getElementById('video-call-view');
+    const status = document.getElementById('video-call-status');
+    const controls = document.getElementById('video-call-controls');
+    const localVideoContainer = document.getElementById('local-video-container');
+
+    videoCallView.classList.remove('hidden');
+    const peerAvatar = isValidHttpUrl(peer.photoURL) ? peer.photoURL : DEFAULT_AVATAR_SVG;
+
+    if (type === 'outgoing') {
+        status.innerHTML = `
+            <img src="${peerAvatar}" alt="${peer.displayName}" class="w-24 h-24 rounded-full mb-4 border-4 border-gray-700 object-cover animate-pulse">
+            <h3 class="text-2xl font-semibold">Calling ${peer.displayName}...</h3>
+            <p class="text-gray-300">Waiting for them to pick up.</p>
+        `;
+        controls.style.display = 'flex';
+        controls.innerHTML = `<button id="hang-up-button" class="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600" aria-label="Hang up">${HANGUP_SVG}</button>`;
+        document.getElementById('hang-up-button').onclick = hangUp;
+        localVideoContainer.style.display = 'block';
+        status.style.display = 'flex';
+
+    } else if (type === 'incoming') {
+        status.innerHTML = `
+            <img src="${peerAvatar}" alt="${peer.displayName}" class="w-24 h-24 rounded-full mb-4 border-4 border-gray-700 object-cover">
+            <h3 class="text-2xl font-semibold">${peer.displayName} is calling...</h3>
+        `;
+        controls.style.display = 'flex';
+        controls.innerHTML = `
+            <button id="decline-call-button" class="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600" aria-label="Decline">${HANGUP_SVG}</button>
+            <button id="answer-call-button" class="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center hover:bg-green-600" aria-label="Answer">
+                <svg class="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20"><path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"></path></svg>
+            </button>
+        `;
+        document.getElementById('decline-call-button').onclick = declineCall;
+        document.getElementById('answer-call-button').onclick = answerCall;
+        localVideoContainer.style.display = 'none';
+        status.style.display = 'flex';
+
+    } else if (type === 'connected') {
+        status.style.display = 'none';
+        localVideoContainer.style.display = 'block';
+        controls.style.display = 'flex';
+        controls.innerHTML = `
+            <button id="toggle-mic-button" class="w-14 h-14 bg-gray-600/80 rounded-full flex items-center justify-center hover:bg-gray-500/80" aria-label="Mute microphone" data-muted="false">${MIC_ON_SVG}</button>
+            <button id="toggle-camera-button" class="w-14 h-14 bg-gray-600/80 rounded-full flex items-center justify-center hover:bg-gray-500/80" aria-label="Turn off camera" data-enabled="true">${CAM_ON_SVG}</button>
+            <button id="hang-up-button" class="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600" aria-label="Hang up">${HANGUP_SVG}</button>
+        `;
+        document.getElementById('toggle-mic-button').onclick = toggleMute;
+        document.getElementById('toggle-camera-button').onclick = toggleCamera;
+        document.getElementById('hang-up-button').onclick = hangUp;
+    }
 };
 
 const hangUp = async () => {
-    const callOverlay = document.getElementById('call-overlay');
-    callOverlay.classList.add('hidden');
-    callOverlay.innerHTML = '';
-    
-    if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
-        localStream = null;
-    }
     if (peerConnection) {
         peerConnection.close();
         peerConnection = null;
     }
-    const remoteAudio = document.getElementById('remote-audio');
-    if (remoteAudio) remoteAudio.srcObject = null;
+    if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+    }
+    remoteStream = new MediaStream();
     
+    // Cleanup UI
+    const videoCallView = document.getElementById('video-call-view');
+    const remoteVideo = document.getElementById('remote-video');
+    const localVideo = document.getElementById('local-video');
+    if (videoCallView) videoCallView.classList.add('hidden');
+    if (remoteVideo) remoteVideo.srcObject = null;
+    if (localVideo) localVideo.srcObject = null;
+    
+    // Reset local video position
+    const localVideoContainer = document.getElementById('local-video-container');
+    if(localVideoContainer) {
+        localVideoContainer.style.top = '1rem';
+        localVideoContainer.style.right = '1rem';
+        localVideoContainer.style.left = 'auto';
+        localVideoContainer.style.bottom = 'auto';
+    }
+
+
     if (currentCallUnsubscribe) {
         currentCallUnsubscribe();
         currentCallUnsubscribe = null;
     }
-
+    
     if (activeCallData) {
         const callRef = db.collection('calls').doc(activeCallData.id);
         const callDoc = await callRef.get();
-        if(callDoc.exists) {
-            // Delete candidates subcollections
-            const callerCandidates = await callRef.collection('callerCandidates').get();
-            callerCandidates.forEach(async doc => await doc.ref.delete());
-            const calleeCandidates = await callRef.collection('calleeCandidates').get();
-            calleeCandidates.forEach(async doc => await doc.ref.delete());
-            // Delete call document
-            await callRef.delete();
+        if (callDoc.exists && callDoc.data().status !== 'ended') {
+            await callRef.update({ status: 'ended' });
         }
         activeCallData = null;
     }
 };
 
-const showCallUI = (state, peerUser) => {
-    const callOverlay = document.getElementById('call-overlay');
-    callOverlay.classList.remove('hidden');
-
-    let content = '';
-    let statusText = '';
-
-    switch(state) {
-        case 'outgoing': statusText = `Calling ${peerUser.displayName}...`; break;
-        case 'incoming': statusText = `${peerUser.displayName} is calling...`; break;
-        case 'connecting': statusText = `Connecting...`; break;
-        case 'active': statusText = `Voice connected`; break;
-    }
-    
-    const peerAvatar = isValidHttpUrl(peerUser.photoURL) ? peerUser.photoURL : DEFAULT_AVATAR_SVG;
-
-    content = `
-        <div class="flex items-center">
-            <img src="${peerAvatar}" class="w-8 h-8 rounded-full mr-3 object-cover">
-            <div>
-                <div class="font-semibold text-white">${peerUser.displayName}</div>
-                <div class="text-sm text-gray-400">${statusText}</div>
-            </div>
-        </div>
-        <div class="flex items-center space-x-2">
-    `;
-
-    if (state === 'incoming') {
-        content += `
-            <button id="answer-call-button" class="p-2 bg-green-500 rounded-full text-white hover:bg-green-600">
-                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"></path></svg>
-            </button>
-            <button id="hangup-call-button" class="p-2 bg-red-500 rounded-full text-white hover:bg-red-600">
-                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v1.172l5.071 5.071a1 1 0 01-1.414 1.414L11 7.414V13a1 1 0 11-2 0V7.414l-3.657 3.657a1 1 0 01-1.414-1.414L9 6.172V4a1 1 0 011-1zm3.293 11.293a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-5-5a1 1 0 011.414-1.414L8 14.586V9a1 1 0 112 0v5.586l3.293-3.293z" clip-rule="evenodd" transform="rotate(135 10 10)"></path></svg>
-            </button>
-        `;
-    } else if (state === 'active') {
-        content += `
-            <button id="mute-call-button" class="p-2 bg-gray-600 rounded-full text-white hover:bg-gray-500" data-muted="false">
-                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M5.5 2.5a2.5 2.5 0 014.123 1.9L6 7.561V5a2.5 2.5 0 01-.5-4.902z"></path><path d="M4.5 5v.561l1 1V5a1.5 1.5 0 013 0v3.061l-1.396-.786A.5.5 0 007 7.5v0a.5.5 0 00-.5.5v1.44l-1 1V10a.5.5 0 00.5.5v0a.5.5 0 00.5-.5V8.268l1-.563a1.5 1.5 0 011.5 1.3V10a2.5 2.5 0 01-5 0V5z"></path><path d="M10 12.5a.5.5 0 01.5.5v1a.5.5 0 01-1 0v-1a.5.5 0 01.5-.5z"></path><path d="M12 11.5a.5.5 0 00-.5.5v3a.5.5 0 001 0v-3a.5.5 0 00-.5-.5z"></path><path d="M3.323 2.323a.5.5 0 01.707-.707l12 12a.5.5 0 01-.707.707l-12-12z"></path></svg>
-            </button>
-            <button id="hangup-call-button" class="p-2 bg-red-500 rounded-full text-white hover:bg-red-600">
-                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v1.172l5.071 5.071a1 1 0 01-1.414 1.414L11 7.414V13a1 1 0 11-2 0V7.414l-3.657 3.657a1 1 0 01-1.414-1.414L9 6.172V4a1 1 0 011-1zm3.293 11.293a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-5-5a1 1 0 011.414-1.414L8 14.586V9a1 1 0 112 0v5.586l3.293-3.293z" clip-rule="evenodd" transform="rotate(135 10 10)"></path></svg>
-            </button>
-        `;
-    } else { // outgoing, connecting
-        content += `
-            <button id="hangup-call-button" class="p-2 bg-red-500 rounded-full text-white hover:bg-red-600">
-                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v1.172l5.071 5.071a1 1 0 01-1.414 1.414L11 7.414V13a1 1 0 11-2 0V7.414l-3.657 3.657a1 1 0 01-1.414-1.414L9 6.172V4a1 1 0 011-1zm3.293 11.293a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-5-5a1 1 0 011.414-1.414L8 14.586V9a1 1 0 112 0v5.586l3.293-3.293z" clip-rule="evenodd" transform="rotate(135 10 10)"></path></svg>
-            </button>
-        `;
-    }
-
-    content += `</div>`;
-    callOverlay.innerHTML = content;
-
-    document.getElementById('hangup-call-button')?.addEventListener('click', hangUp);
-    document.getElementById('answer-call-button')?.addEventListener('click', answerCall);
-};
-
 
 // =================================================================================
-// Settings and Theming
+// Event Listeners
 // =================================================================================
 
-const applyCustomTheme = (colors) => {
-    const root = document.documentElement;
-    root.style.setProperty('--color-gray-900', colors.bg);
-    root.style.setProperty('--color-gray-800', colors.bg);
-    root.style.setProperty('--color-gray-700', colors.bg);
-    root.style.setProperty('--color-text-primary', colors.text);
-    root.style.setProperty('--color-bg-button', colors.accent);
-    root.style.setProperty('--color-text-link', colors.accent);
+// Login/Auth
+document.getElementById('login-button').addEventListener('click', signInWithGoogle);
+document.getElementById('signup-form').addEventListener('submit', handleSignUp);
+document.getElementById('signin-form').addEventListener('submit', handleSignIn);
+document.getElementById('show-signin-link').addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('signup-form').classList.add('hidden');
+    document.getElementById('signin-form').classList.remove('hidden');
+    clearLoginError();
+});
+document.getElementById('show-signup-link').addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('signin-form').classList.add('hidden');
+    document.getElementById('signup-form').classList.remove('hidden');
+    clearLoginError();
+});
+document.querySelectorAll('.signout-button').forEach(btn => btn.addEventListener('click', signOut));
 
-    localStorage.setItem('conflict-custom-theme', JSON.stringify(colors));
-    localStorage.removeItem('conflict-theme');
-    document.body.className = ''; // Remove default/light themes
-    // Un-select preset theme buttons
-    document.querySelectorAll('.theme-option').forEach(btn => btn.classList.remove('border-blue-500'));
-};
-
-const applyTheme = (themeName) => {
-    document.documentElement.style.cssText = ''; // Clear inline styles
-    document.body.className = ''; // Clear existing theme classes
-    if (themeName !== 'default') {
-        document.body.classList.add(`theme-${themeName}`);
+// Main App
+document.querySelectorAll('.user-info-panel').forEach(panel => panel.addEventListener('click', () => {
+    const modal = document.getElementById('my-profile-modal');
+    const usernameInput = document.getElementById('profile-username-input');
+    const avatarInput = document.getElementById('profile-avatar-input');
+    const friendCodeDisplay = document.getElementById('friend-code-display');
+    if (modal && usernameInput && avatarInput && friendCodeDisplay) {
+        usernameInput.value = currentUser.displayName;
+        avatarInput.value = currentUser.photoURL;
+        friendCodeDisplay.textContent = currentUser.uid;
+        modal.style.display = 'flex';
     }
-    localStorage.setItem('conflict-theme', themeName);
-    localStorage.removeItem('conflict-custom-theme');
+}));
+document.getElementById('close-my-profile-modal').addEventListener('click', () => {
+    document.getElementById('my-profile-modal').style.display = 'none';
+});
+document.getElementById('profile-form').addEventListener('submit', handleUpdateProfile);
 
-    // Update active state on theme buttons
-    document.querySelectorAll('.theme-option').forEach(btn => {
-        if (btn.dataset.theme === themeName) {
-            btn.classList.add('border-blue-500');
-        } else {
-            btn.classList.remove('border-blue-500');
-        }
-    });
-};
-
-
-// =================================================================================
-// Event Listeners Setup
-// =================================================================================
-document.addEventListener('DOMContentLoaded', () => {
-    // Apply saved theme on load
-    const savedCustomTheme = localStorage.getItem('conflict-custom-theme');
-    if (savedCustomTheme) {
-        const colors = JSON.parse(savedCustomTheme);
-        applyCustomTheme(colors);
-        document.getElementById('custom-bg-color').value = colors.bg;
-        document.getElementById('custom-text-color').value = colors.text;
-        document.getElementById('custom-accent-color').value = colors.accent;
-    } else {
-        const savedTheme = localStorage.getItem('conflict-theme') || 'default';
-        applyTheme(savedTheme);
-    }
-    
-    // Get all DOM elements once the document is loaded
-    const messageForm = document.getElementById('message-form');
-    const addServerForm = document.getElementById('add-server-form');
-    const createChannelForm = document.getElementById('create-channel-form');
-    const createRoleForm = document.getElementById('create-role-form');
-    const signupForm = document.getElementById('signup-form');
-    const signinForm = document.getElementById('signin-form');
-    const inviteForm = document.getElementById('invite-form');
-    const leaveServerButton = document.getElementById('leave-server-button');
-    const addFriendForm = document.getElementById('add-friend-form');
-    const showSigninLink = document.getElementById('show-signin-link');
-    const showSignupLink = document.getElementById('show-signup-link');
-    const cancelAddServerButton = document.getElementById('cancel-add-server');
-    const addServerModal = document.getElementById('add-server-modal');
-    const serverNameInput = document.getElementById('server-name-input');
-    const profileForm = document.getElementById('profile-form');
-    const serverOptionsButton = document.getElementById('server-options-button');
-    const serverOptionsDropdown = document.getElementById('server-options-dropdown');
-    const inviteButton = document.getElementById('invite-button');
-    const inviteModal = document.getElementById('invite-modal');
-    const inviteServerName = document.getElementById('invite-server-name');
-    const cancelInviteButton = document.getElementById('cancel-invite-button');
-    const messageInput = document.getElementById('message-input');
+// Chat
+document.getElementById('message-form').addEventListener('submit', handleSendMessage);
+document.getElementById('add-friend-form').addEventListener('submit', handleAddFriend);
+document.getElementById('message-input').addEventListener('input', (e) => {
     const sendButton = document.getElementById('send-button');
-    const emojiButton = document.getElementById('emoji-button');
-    const emojiPicker = document.getElementById('emoji-picker');
-    const userProfileModal = document.getElementById('user-profile-modal');
-    const closeUserProfileModalButton = document.getElementById('close-user-profile-modal');
-    const messageList = document.getElementById('message-list');
-    const userListAside = document.getElementById('user-list-aside');
-    const friendList = document.getElementById('friend-list');
-    const settingsModal = document.getElementById('settings-modal');
-    const myProfileModal = document.getElementById('my-profile-modal');
-    const serverSettingsModal = document.getElementById('server-settings-modal');
-    const openServerSettingsButton = document.getElementById('open-server-settings-button');
-    const attachFileButton = document.getElementById('attach-file-button');
-    const fileUploadInput = document.getElementById('file-upload-input');
-    const cancelFilePreviewButton = document.getElementById('cancel-file-preview');
-    const cancelCreateChannelButton = document.getElementById('cancel-create-channel');
-    const createChannelModal = document.getElementById('create-channel-modal');
-    const serverOverviewForm = document.getElementById('server-overview-form');
+    sendButton.disabled = !e.target.value.trim() && !stagedFile;
+});
 
-    // Attach event listeners
-    document.getElementById('login-button')?.addEventListener('click', signInWithGoogle);
-    if (messageForm) messageForm.addEventListener('submit', handleSendMessage);
-    if (addServerForm) addServerForm.addEventListener('submit', handleCreateServer);
-    if (createChannelForm) createChannelForm.addEventListener('submit', handleCreateChannel);
-    if (createRoleForm) createRoleForm.addEventListener('submit', handleCreateRole);
-    if (signupForm) signupForm.addEventListener('submit', handleSignUp);
-    if (signinForm) signinForm.addEventListener('submit', handleSignIn);
-    if (inviteForm) inviteForm.addEventListener('submit', handleInviteFriend);
-    if (leaveServerButton) leaveServerButton.addEventListener('click', handleLeaveServer);
-    if (addFriendForm) addFriendForm.addEventListener('submit', handleAddFriend);
-    if (profileForm) profileForm.addEventListener('submit', handleUpdateProfile);
-    if (attachFileButton) attachFileButton.addEventListener('click', () => fileUploadInput.click());
-    if (fileUploadInput) fileUploadInput.addEventListener('change', handleFileSelect);
-    if (cancelFilePreviewButton) cancelFilePreviewButton.addEventListener('click', cancelFilePreview);
+// File Upload
+document.getElementById('attach-file-button').addEventListener('click', () => document.getElementById('file-upload-input').click());
+document.getElementById('file-upload-input').addEventListener('change', handleFileSelect);
+document.getElementById('cancel-file-preview').addEventListener('click', cancelFilePreview);
 
-    document.querySelectorAll('.signout-button').forEach(button => {
-        button.addEventListener('click', signOut);
+// Modals
+document.getElementById('cancel-add-server').addEventListener('click', () => document.getElementById('add-server-modal').style.display = 'none');
+document.getElementById('add-server-form').addEventListener('submit', handleCreateServer);
+
+document.getElementById('cancel-create-channel').addEventListener('click', () => document.getElementById('create-channel-modal').style.display = 'none');
+document.getElementById('create-channel-form').addEventListener('submit', handleCreateChannel);
+
+document.getElementById('server-options-button').addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('server-options-dropdown').classList.toggle('hidden');
+});
+document.getElementById('invite-button').addEventListener('click', () => {
+    const modal = document.getElementById('invite-modal');
+    document.getElementById('invite-server-name').textContent = document.getElementById('server-name-text').textContent;
+    document.getElementById('friend-code-input').value = '';
+    document.getElementById('invite-status-message').textContent = '';
+    if(modal) modal.style.display = 'flex';
+});
+document.getElementById('cancel-invite-button').addEventListener('click', () => document.getElementById('invite-modal').style.display = 'none');
+document.getElementById('invite-form').addEventListener('submit', handleInviteFriend);
+document.getElementById('leave-server-button').addEventListener('click', handleLeaveServer);
+
+// Server/User profile clicks
+document.getElementById('chat-panel').addEventListener('click', (e) => {
+    const userId = e.target.dataset.userid;
+    if (userId) {
+        showUserProfile(userId);
+    }
+});
+document.getElementById('home-view').addEventListener('click', (e) => {
+    const userId = e.target.dataset.userid;
+    if (userId) {
+        showUserProfile(userId);
+    }
+});
+document.getElementById('close-user-profile-modal').addEventListener('click', () => {
+    document.getElementById('user-profile-modal').style.display = 'none';
+});
+
+// Settings Modal
+document.querySelectorAll('.settings-button').forEach(btn => btn.addEventListener('click', () => {
+    document.getElementById('settings-modal').style.display = 'flex';
+}));
+document.getElementById('close-settings-modal').addEventListener('click', () => {
+    document.getElementById('settings-modal').style.display = 'none';
+});
+document.getElementById('open-server-settings-button').addEventListener('click', () => {
+    document.getElementById('server-settings-modal').style.display = 'flex';
+});
+document.getElementById('close-server-settings-modal').addEventListener('click', () => {
+    document.getElementById('server-settings-modal').style.display = 'none';
+});
+
+// Server Settings Navigation
+document.querySelectorAll('.server-settings-nav-button').forEach(button => {
+    button.addEventListener('click', () => {
+        const sectionId = button.dataset.section;
+        document.querySelectorAll('.server-settings-section').forEach(section => {
+            section.classList.toggle('hidden', section.id !== sectionId);
+        });
+        document.querySelectorAll('.server-settings-nav-button').forEach(btn => {
+            btn.classList.toggle('bg-gray-700', btn === button);
+            btn.classList.toggle('text-white', btn === button);
+        });
     });
+});
+document.getElementById('server-overview-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const newName = document.getElementById('server-settings-name-input').value.trim();
+    if (newName && activeServerId) {
+        await db.collection('servers').doc(activeServerId).update({ name: newName });
+        const statusEl = document.getElementById('server-settings-status');
+        statusEl.textContent = 'Saved!';
+        setTimeout(() => { statusEl.textContent = ''; }, 2000);
+    }
+});
+document.getElementById('create-role-form').addEventListener('submit', handleCreateRole);
 
-    if (showSigninLink) showSigninLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        signupForm.classList.add('hidden');
-        signinForm.classList.remove('hidden');
-        clearLoginError();
-    });
+// Global click listener to close dropdowns
+document.addEventListener('click', (e) => {
+    if (!document.getElementById('server-options-button').contains(e.target)) {
+        document.getElementById('server-options-dropdown').classList.add('hidden');
+    }
+    if (!document.getElementById('emoji-button').contains(e.target)) {
+        document.getElementById('emoji-picker').classList.add('hidden');
+    }
+});
 
-    if (showSignupLink) showSignupLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        signinForm.classList.add('hidden');
-        signupForm.classList.remove('hidden');
-        clearLoginError();
-    });
+// Draggable local video
+const localVideoContainer = document.getElementById('local-video-container');
+let isDragging = false;
+let offsetX, offsetY;
 
-    if (cancelAddServerButton) cancelAddServerButton.addEventListener('click', () => addServerModal.style.display = 'none');
-    if (addServerModal) addServerModal.addEventListener('click', (e) => {
-        if (e.target === addServerModal) addServerModal.style.display = 'none';
-    });
-    
-    if (cancelCreateChannelButton) cancelCreateChannelButton.addEventListener('click', () => createChannelModal.style.display = 'none');
-    if (createChannelModal) createChannelModal.addEventListener('click', (e) => {
-        if (e.target === createChannelModal) createChannelModal.style.display = 'none';
-    });
+localVideoContainer.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    offsetX = e.clientX - localVideoContainer.offsetLeft;
+    offsetY = e.clientY - localVideoContainer.offsetTop;
+    localVideoContainer.style.transition = 'none';
+    e.preventDefault();
+});
 
-    // My Profile Modal Logic
-    const openMyProfileModal = () => {
-        if (!currentUser || !myProfileModal) return;
-        document.getElementById('profile-username-input').value = currentUser.displayName;
-        document.getElementById('profile-avatar-input').value = currentUser.photoURL;
-        document.getElementById('friend-code-display').textContent = currentUser.uid;
-        myProfileModal.style.display = 'flex';
+document.addEventListener('mousemove', (e) => {
+    if (isDragging) {
+        let x = e.clientX - offsetX;
+        let y = e.clientY - offsetY;
+
+        const parentRect = localVideoContainer.parentElement.getBoundingClientRect();
+        const elRect = localVideoContainer.getBoundingClientRect();
+        
+        x = Math.max(0, Math.min(x, parentRect.width - elRect.width));
+        y = Math.max(0, Math.min(y, parentRect.height - elRect.height));
+
+        localVideoContainer.style.left = `${x}px`;
+        localVideoContainer.style.top = `${y}px`;
+        localVideoContainer.style.right = 'auto';
+        localVideoContainer.style.bottom = 'auto';
+    }
+});
+
+document.addEventListener('mouseup', () => {
+    isDragging = false;
+    localVideoContainer.style.transition = 'all 0.3s ease';
+});
+
+// Roles Drag and Drop
+const rolesList = document.getElementById('roles-list');
+rolesList.addEventListener('dragstart', (e) => {
+    draggedRoleId = e.target.dataset.roleId;
+    e.target.classList.add('role-dragging');
+});
+rolesList.addEventListener('dragend', (e) => {
+    e.target.classList.remove('role-dragging');
+    draggedRoleId = null;
+});
+rolesList.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    const target = e.target.closest('[data-role-id]');
+    if (target && target.dataset.roleId !== draggedRoleId) {
+        const rect = target.getBoundingClientRect();
+        const next = (e.clientY - rect.top) / rect.height > 0.5;
+        const draggedEl = rolesList.querySelector(`[data-role-id="${draggedRoleId}"]`);
+        if (next) {
+            target.parentNode.insertBefore(draggedEl, target.nextSibling);
+        } else {
+            target.parentNode.insertBefore(draggedEl, target);
+        }
+    }
+});
+rolesList.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    const newRoleOrder = Array.from(rolesList.children).map(child => child.dataset.roleId);
+    activeServerRoleOrder = newRoleOrder;
+    await db.collection('servers').doc(activeServerId).update({ roleOrder: newRoleOrder });
+});
+
+// Member role checkbox handler
+document.getElementById('server-members-list').addEventListener('change', async (e) => {
+    if (e.target.type === 'checkbox') {
+        const userId = e.target.dataset.userid;
+        const roleId = e.target.dataset.roleid;
+        const isChecked = e.target.checked;
+        
+        const memberRef = db.collection('servers').doc(activeServerId).collection('members').doc(userId);
+        if (isChecked) {
+            await memberRef.update({ roles: firebase.firestore.FieldValue.arrayUnion(roleId) });
+        } else {
+            await memberRef.update({ roles: firebase.firestore.FieldValue.arrayRemove(roleId) });
+        }
+    }
+});
+
+// Emoji picker
+const emojiPicker = document.getElementById('emoji-picker');
+const emojiButton = document.getElementById('emoji-button');
+const messageInput = document.getElementById('message-input');
+EMOJIS.forEach(emoji => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'text-2xl rounded-md hover:bg-gray-700';
+    btn.textContent = emoji;
+    btn.onclick = () => {
+        messageInput.value += emoji;
+        messageInput.focus();
+        messageInput.dispatchEvent(new Event('input', { bubbles: true }));
     };
-    document.querySelectorAll('.user-info-panel').forEach(button => button.addEventListener('click', openMyProfileModal));
-    if (myProfileModal) {
-        document.getElementById('close-my-profile-modal')?.addEventListener('click', () => myProfileModal.style.display = 'none');
-        myProfileModal.addEventListener('click', (e) => { if (e.target === myProfileModal) myProfileModal.style.display = 'none'; });
-    }
-
-    // Settings Modal Logic
-    document.querySelectorAll('.settings-button').forEach(button => button.addEventListener('click', () => settingsModal.style.display = 'flex'));
-    if (settingsModal) {
-        document.getElementById('close-settings-modal')?.addEventListener('click', () => settingsModal.style.display = 'none');
-        document.querySelectorAll('.settings-nav-button').forEach(button => {
-            button.addEventListener('click', () => {
-                const sectionId = button.dataset.section;
-                document.querySelectorAll('.settings-section').forEach(el => el.classList.add('hidden'));
-                document.getElementById(sectionId)?.classList.remove('hidden');
-                document.querySelectorAll('.settings-nav-button').forEach(btn => btn.classList.remove('bg-gray-700', 'text-white'));
-                button.classList.add('bg-gray-700', 'text-white');
-            });
-        });
-        document.querySelectorAll('.theme-option').forEach(button => {
-            button.addEventListener('click', () => applyTheme(button.dataset.theme));
-        });
-        // Custom theme pickers
-        ['custom-bg-color', 'custom-text-color', 'custom-accent-color'].forEach(id => {
-            document.getElementById(id).addEventListener('input', () => {
-                const colors = {
-                    bg: document.getElementById('custom-bg-color').value,
-                    text: document.getElementById('custom-text-color').value,
-                    accent: document.getElementById('custom-accent-color').value
-                };
-                applyCustomTheme(colors);
-            });
-        });
-    }
-
-    // Server Options & Settings Modal Logic
-    if (openServerSettingsButton) openServerSettingsButton.addEventListener('click', async () => {
-        if (serverSettingsModal && activeServerId) {
-            const serverDoc = await db.collection('servers').doc(activeServerId).get();
-            if(serverDoc.exists) {
-                document.getElementById('settings-server-name').textContent = serverDoc.data().name;
-            }
-            serverSettingsModal.style.display = 'flex';
-        }
-    });
-    if (serverSettingsModal) {
-        document.getElementById('close-server-settings-modal')?.addEventListener('click', () => serverSettingsModal.style.display = 'none');
-        document.querySelectorAll('.server-settings-nav-button').forEach(button => {
-            button.addEventListener('click', () => {
-                const sectionId = button.dataset.section;
-                document.querySelectorAll('.server-settings-section').forEach(el => el.classList.add('hidden'));
-                document.getElementById(sectionId)?.classList.remove('hidden');
-                document.querySelectorAll('.server-settings-nav-button').forEach(btn => btn.classList.remove('bg-gray-700', 'text-white'));
-                button.classList.add('bg-gray-700', 'text-white');
-            });
-        });
-
-        if (serverOverviewForm) serverOverviewForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const newName = document.getElementById('server-settings-name-input').value.trim();
-            const statusEl = document.getElementById('server-settings-status');
-            if (newName && activeServerId) {
-                await db.collection('servers').doc(activeServerId).update({ name: newName });
-                statusEl.textContent = 'Saved!';
-                setTimeout(() => { statusEl.textContent = ''; }, 2000);
-            }
-        });
-
-        // Role Drag and Drop
-        const rolesList = document.getElementById('roles-list');
-        rolesList.addEventListener('dragstart', e => {
-            draggedRoleId = e.target.dataset.roleId;
-            e.target.classList.add('role-dragging');
-        });
-        rolesList.addEventListener('dragend', e => {
-            e.target.classList.remove('role-dragging');
-        });
-        rolesList.addEventListener('dragover', e => {
-            e.preventDefault();
-            const draggingEl = document.querySelector('.role-dragging');
-            const afterElement = [...rolesList.querySelectorAll('[draggable="true"]:not(.role-dragging)')].reduce((closest, child) => {
-                const box = child.getBoundingClientRect();
-                const offset = e.clientY - box.top - box.height / 2;
-                if (offset < 0 && offset > closest.offset) {
-                    return { offset: offset, element: child };
-                } else {
-                    return closest;
-                }
-            }, { offset: Number.NEGATIVE_INFINITY }).element;
-
-            if (afterElement == null) {
-                rolesList.appendChild(draggingEl);
-            } else {
-                rolesList.insertBefore(draggingEl, afterElement);
-            }
-        });
-        rolesList.addEventListener('drop', async e => {
-            e.preventDefault();
-            const newOrder = [...rolesList.querySelectorAll('[data-role-id]')].map(el => el.dataset.roleId);
-            await db.collection('servers').doc(activeServerId).update({ roleOrder: newOrder });
-            activeServerRoleOrder = newOrder;
-        });
-
-        // Member Role Assignment
-        const membersListContainer = document.getElementById('members-section');
-        membersListContainer.addEventListener('change', async (e) => {
-            if (e.target.type === 'checkbox') {
-                const userId = e.target.dataset.userid;
-                const roleId = e.target.dataset.roleid;
-                const memberRef = db.collection('servers').doc(activeServerId).collection('members').doc(userId);
-
-                if (e.target.checked) {
-                    await memberRef.update({ roles: firebase.firestore.FieldValue.arrayUnion(roleId) });
-                } else {
-                    await memberRef.update({ roles: firebase.firestore.FieldValue.arrayRemove(roleId) });
-                }
-            }
-        });
-
-    }
-
-    if (serverOptionsButton) serverOptionsButton.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (serverOptionsDropdown) serverOptionsDropdown.classList.toggle('hidden');
-    });
-
-    document.addEventListener('click', (e) => {
-        if (serverOptionsDropdown && !serverOptionsDropdown.classList.contains('hidden')) {
-            serverOptionsDropdown.classList.add('hidden');
-        }
-        if (emojiPicker && !emojiPicker.classList.contains('hidden') && !emojiPicker.contains(e.target) && e.target !== emojiButton) {
-            emojiPicker.classList.add('hidden');
-        }
-    });
-
-    // Invite Modal Logic
-    if (inviteButton) inviteButton.addEventListener('click', async () => {
-        const serverDoc = await db.collection('servers').doc(activeServerId).get();
-        if (inviteServerName) inviteServerName.textContent = serverDoc.data().name;
-        document.getElementById('friend-code-input').value = '';
-        document.getElementById('invite-status-message').textContent = '';
-        if (inviteModal) inviteModal.style.display = 'flex';
-    });
-    if (cancelInviteButton) cancelInviteButton.addEventListener('click', () => inviteModal.style.display = 'none');
-    if (inviteModal) inviteModal.addEventListener('click', (e) => { if (e.target === inviteModal) inviteModal.style.display = 'none'; });
-
-    // Message Input & Send Button state
-    if (messageInput) messageInput.addEventListener('input', () => {
-        if (sendButton) sendButton.disabled = !messageInput.value.trim() && !stagedFile;
-    });
-    if (sendButton) sendButton.disabled = true;
-
-    // Emoji Picker Logic
-    if (emojiButton && emojiPicker) {
-        if (emojiPicker.childElementCount === 0) { // Populate only once
-            EMOJIS.forEach(emoji => {
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.className = 'text-2xl p-1 rounded-md hover:bg-gray-700';
-                button.textContent = emoji;
-                button.onclick = () => {
-                    if (messageInput) {
-                        messageInput.value += emoji;
-                        messageInput.focus();
-                        sendButton.disabled = !messageInput.value.trim();
-                    }
-                };
-                emojiPicker.appendChild(button);
-            });
-        }
-        emojiButton.addEventListener('click', (e) => {
-            e.stopPropagation();
-            emojiPicker.classList.toggle('hidden');
-        });
-    }
-    
-    // Other User Profile Modal Logic
-    if (userProfileModal && closeUserProfileModalButton) {
-        closeUserProfileModalButton.addEventListener('click', () => userProfileModal.style.display = 'none');
-        userProfileModal.addEventListener('click', (e) => { if (e.target === userProfileModal) userProfileModal.style.display = 'none'; });
-    }
-    
-    // Delegated event listener for opening user profiles
-    const handleProfileClick = (e) => {
-        let target = e.target;
-        while (target && target !== e.currentTarget) {
-            if (target.dataset.userid) {
-                e.preventDefault();
-                e.stopPropagation(); // Prevents friend button's DM navigation
-                showUserProfile(target.dataset.userid);
-                return; 
-            }
-            target = target.parentElement;
-        }
-    };
-    
-    if(messageList) messageList.addEventListener('click', handleProfileClick);
-    if(userListAside) userListAside.addEventListener('click', handleProfileClick);
-    if(friendList) friendList.addEventListener('click', handleProfileClick);
-
+    emojiPicker.appendChild(btn);
+});
+emojiButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    emojiPicker.classList.toggle('hidden');
 });

@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/svg+xml" href="https://cdn.modrinth.com/data/PRlYmJuK/fc0ab4c52fa73a4a479bfea1ad943002be5ff2de.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Conflict</title>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -251,7 +251,7 @@
       </div>
 
       <!-- Chat Panel -->
-      <div id="chat-panel" class="flex-1 flex flex-col bg-gray-700">
+      <div id="chat-panel" class="flex-1 flex flex-col bg-gray-700 relative">
         <div id="placeholder-view" class="flex-1 flex items-center justify-center">
             <div class="text-center text-gray-400">
                 <h2 class="text-2xl font-bold">Welcome to Conflict!</h2>
@@ -262,12 +262,7 @@
           <header id="chat-header" class="h-12 flex items-center px-4 shadow-md border-b border-gray-900/50 flex-shrink-0">
             <!-- Channel/DM name rendered by JS -->
           </header>
-          <!-- Call Overlay -->
-          <div id="call-overlay" class="hidden h-12 bg-gray-800 border-b border-gray-900/50 flex-shrink-0 px-4 flex items-center justify-between shadow-md">
-            <!-- Call info and controls will be rendered here by JS -->
-          </div>
-          <audio id="remote-audio" autoplay></audio>
-
+          
           <main class="flex-1 flex overflow-hidden">
             <div class="flex-1 flex flex-col overflow-hidden">
               <div id="message-list" class="flex-1 p-2 overflow-y-auto">
@@ -306,6 +301,20 @@
               <!-- User list rendered by JS -->
             </aside>
           </main>
+        </div>
+        
+        <!-- Video Call View -->
+        <div id="video-call-view" class="hidden absolute inset-0 bg-gray-900 z-30 flex flex-col items-center justify-center">
+            <video id="remote-video" autoplay playsinline class="w-full h-full object-cover"></video>
+            <div id="video-call-status" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center text-white bg-black/50 p-4 rounded-lg flex flex-col items-center space-y-4">
+                 <!-- Status info will be rendered by JS -->
+            </div>
+            <div id="local-video-container" class="absolute top-4 right-4 w-48 h-36 bg-black rounded-lg shadow-lg overflow-hidden border-2 border-gray-700 cursor-move" style="display: none;">
+                <video id="local-video" autoplay muted playsinline class="w-full h-full object-cover"></video>
+            </div>
+            <div id="video-call-controls" class="absolute bottom-8 flex items-center space-x-4 p-3 bg-black/50 rounded-full" style="display: none;">
+                 <!-- Buttons will be rendered by JS -->
+            </div>
         </div>
       </div>
       
