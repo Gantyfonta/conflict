@@ -44,6 +44,20 @@
             --color-bg-button: #0067e0;
             --color-bg-button-hover: #0056ba;
         }
+        
+        input[type="color"] {
+        	-webkit-appearance: none;
+        	border: none;
+        	width: 32px;
+        	height: 32px;
+        }
+        input[type="color"]::-webkit-color-swatch-wrapper {
+        	padding: 0;
+        }
+        input[type="color"]::-webkit-color-swatch {
+        	border: 1px solid var(--color-gray-600);
+            border-radius: 50%;
+        }
     </style>
     <script>
       tailwind.config = {
@@ -201,12 +215,13 @@
       <div id="channel-list-panel" class="w-64 bg-gray-800 flex-col hidden">
         <header id="server-name-header" class="px-4 h-12 flex items-center justify-between shadow-md font-bold text-lg border-b border-gray-900/50 relative">
             <span id="server-name-text" class="truncate"></span>
-            <button id="server-settings-button" class="text-gray-400 hover:text-white">
+            <button id="server-options-button" class="text-gray-400 hover:text-white">
                 <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
             </button>
-            <div id="server-settings-dropdown" class="hidden absolute right-0 top-12 mt-1 w-56 bg-gray-900 rounded-md shadow-lg z-20">
+            <div id="server-options-dropdown" class="hidden absolute right-0 top-12 mt-1 w-56 bg-gray-900 rounded-md shadow-lg z-20">
                 <div class="py-1">
                     <button id="invite-button" class="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Invite People</button>
+                    <button id="open-server-settings-button" class="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Server Settings</button>
                     <div class="border-t border-gray-700 mx-2 my-1"></div>
                     <button id="leave-server-button" class="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-700">Leave Server</button>
                 </div>
@@ -286,7 +301,7 @@
       
       <!-- Version Number -->
       <div class="absolute bottom-1 right-2 text-xs text-gray-500">
-          v2.5 <!-- Remember to update this version number! -->
+          v2.6 <!-- Always update this version number on every change! -->
       </div>
 
 
@@ -369,8 +384,24 @@
                             </button>
                             <button class="theme-option p-4 border-2 border-gray-600 rounded-lg text-left" data-theme="light">
                                 <div class="w-full h-16 bg-gray-100 border border-gray-300 rounded-md mb-2"></div>
-                                <h4 class="font-semibold text-gray-400">Light</h4>
+                                <h4 class="font-semibold">Light</h4>
                             </button>
+                         </div>
+                         <div class="border-t border-gray-600 my-6"></div>
+                         <h3 class="text-sm font-bold uppercase text-gray-400 mb-4">Custom Theme</h3>
+                         <div class="space-y-4">
+                             <div class="flex items-center justify-between">
+                                 <label for="custom-bg-color" class="font-semibold">Background Color</label>
+                                 <input type="color" id="custom-bg-color" value="#2f3136">
+                             </div>
+                             <div class="flex items-center justify-between">
+                                 <label for="custom-text-color" class="font-semibold">Text Color</label>
+                                 <input type="color" id="custom-text-color" value="#f2f3f5">
+                             </div>
+                             <div class="flex items-center justify-between">
+                                 <label for="custom-accent-color" class="font-semibold">Accent Color</label>
+                                 <input type="color" id="custom-accent-color" value="#5865f2">
+                             </div>
                          </div>
                     </div>
                 </main>
@@ -380,6 +411,65 @@
                     </button>
                 </footer>
             </div>
+        </div>
+    </div>
+
+    <!-- Server Settings Modal -->
+    <div id="server-settings-modal" class="hidden fixed inset-0 bg-black/50 z-50 items-center justify-center">
+        <div class="bg-gray-800 rounded-lg w-full max-w-4xl h-[600px] flex overflow-hidden shadow-xl">
+            <!-- Sidebar -->
+            <nav class="w-64 bg-gray-900 p-4 space-y-2 flex flex-col">
+                <div class="flex-1">
+                    <h3 id="settings-server-name" class="px-2 mb-2 font-bold text-white truncate">Server Settings</h3>
+                    <div class="border-t border-gray-700 mx-2 my-2"></div>
+                    <h3 class="px-2 text-xs font-bold uppercase text-gray-400">User Management</h3>
+                    <button data-section="roles-section" class="server-settings-nav-button w-full text-left px-2 py-1.5 rounded-md text-gray-300 hover:bg-gray-700/50 hover:text-white">Roles</button>
+                </div>
+            </nav>
+            <!-- Content -->
+            <div class="flex-1 flex flex-col bg-gray-700">
+                <main class="flex-1 p-8 overflow-y-auto">
+                    <!-- Roles Section -->
+                    <div id="roles-section" class="server-settings-section">
+                         <h2 class="text-2xl font-bold mb-6">Roles</h2>
+                         <div class="bg-gray-800 p-4 rounded-md">
+                            <div id="roles-list" class="space-y-2 mb-4">
+                                <!-- Roles will be rendered here -->
+                            </div>
+                            <form id="create-role-form">
+                                <h3 class="text-sm font-bold uppercase text-gray-400 mb-2">Create Role</h3>
+                                <div class="flex items-center space-x-2">
+                                    <input id="role-name-input" type="text" placeholder="New Role Name" class="flex-1 bg-gray-900 border border-gray-700 rounded-md p-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                                    <input id="role-color-input" type="color" value="#99aab5" class="rounded-full w-8 h-8 cursor-pointer">
+                                    <button type="submit" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-md font-semibold">Add</button>
+                                </div>
+                            </form>
+                         </div>
+                    </div>
+                </main>
+                <footer class="p-4 flex justify-end bg-gray-800/50">
+                    <button id="close-server-settings-modal" class="w-10 h-10 flex items-center justify-center rounded-full border-2 border-gray-500 text-gray-500 hover:text-white hover:border-white transition-colors">
+                        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
+                    </button>
+                </footer>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Channel Modal -->
+    <div id="create-channel-modal" class="hidden fixed inset-0 bg-black/50 z-50 items-center justify-center">
+        <div class="bg-gray-700 rounded-lg p-6 w-full max-w-md" >
+            <h2 class="text-2xl font-bold text-center mb-4">Create Text Channel</h2>
+            <form id="create-channel-form">
+                <div class="mb-4">
+                    <label for="channel-name-input" class="text-xs font-bold uppercase text-gray-400">Channel Name</label>
+                    <input id="channel-name-input" type="text" placeholder="new-channel" class="w-full bg-gray-800 border border-gray-900 rounded-md p-2 mt-1 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+                </div>
+                <div class="bg-gray-800 p-4 rounded-md flex justify-end space-x-4">
+                     <button type="button" id="cancel-create-channel" class="text-gray-300 hover:text-white">Cancel</button>
+                     <button type="submit" class="px-6 py-2 bg-blue-500 hover:bg-blue-600 rounded-md font-semibold">Create Channel</button>
+                </div>
+            </form>
         </div>
     </div>
 

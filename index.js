@@ -46,6 +46,7 @@ let currentUser = null;
 let activeView = 'servers'; // 'servers' or 'home'
 let activeServerId = null;
 let activeChannelId = null; // Can be a server channel ID or a DM channel ID
+let activeServerRoles = {};
 let stagedFile = null;
 let messageUnsubscribe = () => {};
 let channelUnsubscribe = () => {};
@@ -283,8 +284,17 @@ const renderChannels = (server, channels) => {
     channelList.innerHTML = `
         <div class="flex items-center justify-between px-2 pt-2 pb-1">
             <h2 class="text-xs font-bold tracking-wider text-gray-400 uppercase">Text Channels</h2>
+            <button id="add-channel-button" class="text-gray-400 hover:text-white">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+            </button>
         </div>
     `;
+    
+    document.getElementById('add-channel-button').onclick = () => {
+        const createChannelModal = document.getElementById('create-channel-modal');
+        if(createChannelModal) createChannelModal.style.display = 'flex';
+    };
+
     channels.forEach(channel => {
         const isActive = channel.id === activeChannelId;
         const channelLink = document.createElement('button');
@@ -402,6 +412,25 @@ const renderUsers = (users) => {
     });
 }
 
+const renderRoles = (roles) => {
+    const rolesList = document.getElementById('roles-list');
+    if (!rolesList) return;
+
+    rolesList.innerHTML = '';
+    Object.entries(roles).forEach(([id, role]) => {
+        const roleEl = document.createElement('div');
+        roleEl.className = 'flex items-center justify-between bg-gray-700 p-2 rounded-md';
+        roleEl.innerHTML = `
+            <div class="flex items-center">
+                <div class="w-4 h-4 rounded-full mr-3" style="background-color: ${role.color};"></div>
+                <span class="font-semibold text-white">${role.name}</span>
+            </div>
+        `;
+        // Add edit/delete buttons in a future update
+        rolesList.appendChild(roleEl);
+    });
+}
+
 // =================================================================================
 // Data Handling & State Management
 // =================================================================================
@@ -464,6 +493,7 @@ const selectHome = () => {
     activeView = 'home';
     activeServerId = null;
     activeChannelId = null;
+    activeServerRoles = {};
 
     if (messageUnsubscribe) messageUnsubscribe();
     if (channelUnsubscribe) channelUnsubscribe();
@@ -534,13 +564,15 @@ const selectServer = async (serverId) => {
 
     const serverRef = db.collection('servers').doc(serverId);
 
-    // Listener for server details (name) and members
+    // Listener for server details (name, members, roles)
     usersUnsubscribe = serverRef.onSnapshot(async (doc) => {
         if (doc.exists) {
             const serverData = doc.data();
             const memberUIDs = serverData.members || [];
+            activeServerRoles = serverData.roles || {};
+            renderRoles(activeServerRoles); // Update server settings modal UI
+            
             if (memberUIDs.length > 0) {
-                // BUG FIX: Only fetch users who are members of the current server.
                 const userDocs = await db.collection('users').where(firebase.firestore.FieldPath.documentId(), 'in', memberUIDs).get();
                 const users = userDocs.docs.map(d => ({ id: d.id, ...d.data() }));
                 renderUsers(users);
@@ -701,7 +733,11 @@ const handleCreateServer = async (e) => {
             iconUrl: `https://picsum.photos/seed/${Date.now()}/64/64`,
             owner: currentUser.uid,
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            members: [currentUser.uid]
+            members: [currentUser.uid],
+            roles: {
+                'owner': { name: 'Owner', color: '#ffc107' },
+                'default': { name: '@everyone', color: '#99aab5' }
+            }
         });
         await newServerRef.collection('channels').doc('general').set({
             name: 'general'
@@ -712,6 +748,44 @@ const handleCreateServer = async (e) => {
         selectServer(newServerRef.id);
     }
 };
+
+const handleCreateChannel = async (e) => {
+    e.preventDefault();
+    const channelNameInput = document.getElementById('channel-name-input');
+    const modal = document.getElementById('create-channel-modal');
+    const channelName = channelNameInput.value.trim();
+    if(channelName && activeServerId) {
+        const formattedName = channelName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+        if (formattedName) {
+            await db.collection('servers').doc(activeServerId).collection('channels').add({
+                name: formattedName
+            });
+            channelNameInput.value = '';
+            if(modal) modal.style.display = 'none';
+        }
+    }
+}
+
+const handleCreateRole = async (e) => {
+    e.preventDefault();
+    const roleNameInput = document.getElementById('role-name-input');
+    const roleColorInput = document.getElementById('role-color-input');
+    const roleName = roleNameInput.value.trim();
+    const roleColor = roleColorInput.value;
+
+    if (roleName && activeServerId) {
+        const serverRef = db.collection('servers').doc(activeServerId);
+        const roleId = `role_${Date.now()}`;
+        
+        await serverRef.update({
+            [`roles.${roleId}`]: { name: roleName, color: roleColor }
+        });
+        
+        roleNameInput.value = '';
+        roleColorInput.value = '#99aab5';
+    }
+}
+
 
 const handleAddFriend = async (e) => {
     e.preventDefault();
@@ -933,12 +1007,30 @@ const cancelImagePreview = () => {
 // Settings and Theming
 // =================================================================================
 
+const applyCustomTheme = (colors) => {
+    const root = document.documentElement;
+    root.style.setProperty('--color-gray-900', colors.bg);
+    root.style.setProperty('--color-gray-800', colors.bg);
+    root.style.setProperty('--color-gray-700', colors.bg);
+    root.style.setProperty('--color-text-primary', colors.text);
+    root.style.setProperty('--color-bg-button', colors.accent);
+    root.style.setProperty('--color-text-link', colors.accent);
+
+    localStorage.setItem('conflict-custom-theme', JSON.stringify(colors));
+    localStorage.removeItem('conflict-theme');
+    document.body.className = ''; // Remove default/light themes
+    // Un-select preset theme buttons
+    document.querySelectorAll('.theme-option').forEach(btn => btn.classList.remove('border-blue-500'));
+};
+
 const applyTheme = (themeName) => {
+    document.documentElement.style.cssText = ''; // Clear inline styles
     document.body.className = ''; // Clear existing theme classes
     if (themeName !== 'default') {
         document.body.classList.add(`theme-${themeName}`);
     }
     localStorage.setItem('conflict-theme', themeName);
+    localStorage.removeItem('conflict-custom-theme');
 
     // Update active state on theme buttons
     document.querySelectorAll('.theme-option').forEach(btn => {
@@ -956,13 +1048,23 @@ const applyTheme = (themeName) => {
 // =================================================================================
 document.addEventListener('DOMContentLoaded', () => {
     // Apply saved theme on load
-    const savedTheme = localStorage.getItem('conflict-theme') || 'default';
-    applyTheme(savedTheme);
+    const savedCustomTheme = localStorage.getItem('conflict-custom-theme');
+    if (savedCustomTheme) {
+        const colors = JSON.parse(savedCustomTheme);
+        applyCustomTheme(colors);
+        document.getElementById('custom-bg-color').value = colors.bg;
+        document.getElementById('custom-text-color').value = colors.text;
+        document.getElementById('custom-accent-color').value = colors.accent;
+    } else {
+        const savedTheme = localStorage.getItem('conflict-theme') || 'default';
+        applyTheme(savedTheme);
+    }
     
     // Get all DOM elements once the document is loaded
-    const loginButton = document.getElementById('login-button');
     const messageForm = document.getElementById('message-form');
     const addServerForm = document.getElementById('add-server-form');
+    const createChannelForm = document.getElementById('create-channel-form');
+    const createRoleForm = document.getElementById('create-role-form');
     const signupForm = document.getElementById('signup-form');
     const signinForm = document.getElementById('signin-form');
     const inviteForm = document.getElementById('invite-form');
@@ -974,8 +1076,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const addServerModal = document.getElementById('add-server-modal');
     const serverNameInput = document.getElementById('server-name-input');
     const profileForm = document.getElementById('profile-form');
-    const serverSettingsButton = document.getElementById('server-settings-button');
-    const serverSettingsDropdown = document.getElementById('server-settings-dropdown');
+    const serverOptionsButton = document.getElementById('server-options-button');
+    const serverOptionsDropdown = document.getElementById('server-options-dropdown');
     const inviteButton = document.getElementById('invite-button');
     const inviteModal = document.getElementById('invite-modal');
     const inviteServerName = document.getElementById('invite-server-name');
@@ -991,15 +1093,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const friendList = document.getElementById('friend-list');
     const settingsModal = document.getElementById('settings-modal');
     const myProfileModal = document.getElementById('my-profile-modal');
+    const serverSettingsModal = document.getElementById('server-settings-modal');
+    const openServerSettingsButton = document.getElementById('open-server-settings-button');
     const attachFileButton = document.getElementById('attach-file-button');
     const imageUploadInput = document.getElementById('image-upload-input');
     const cancelImagePreviewButton = document.getElementById('cancel-image-preview');
+    const cancelCreateChannelButton = document.getElementById('cancel-create-channel');
+    const createChannelModal = document.getElementById('create-channel-modal');
 
-
-    // Attach event listeners, with checks to prevent errors if an element is missing
-    if (loginButton) loginButton.addEventListener('click', signInWithGoogle);
+    // Attach event listeners
+    document.getElementById('login-button')?.addEventListener('click', signInWithGoogle);
     if (messageForm) messageForm.addEventListener('submit', handleSendMessage);
     if (addServerForm) addServerForm.addEventListener('submit', handleCreateServer);
+    if (createChannelForm) createChannelForm.addEventListener('submit', handleCreateChannel);
+    if (createRoleForm) createRoleForm.addEventListener('submit', handleCreateRole);
     if (signupForm) signupForm.addEventListener('submit', handleSignUp);
     if (signinForm) signinForm.addEventListener('submit', handleSignIn);
     if (inviteForm) inviteForm.addEventListener('submit', handleInviteFriend);
@@ -1028,140 +1135,99 @@ document.addEventListener('DOMContentLoaded', () => {
         clearLoginError();
     });
 
-    if (cancelAddServerButton) cancelAddServerButton.addEventListener('click', () => {
-        addServerModal.style.display = 'none';
-        if (serverNameInput) serverNameInput.value = '';
-    });
-
+    if (cancelAddServerButton) cancelAddServerButton.addEventListener('click', () => addServerModal.style.display = 'none');
     if (addServerModal) addServerModal.addEventListener('click', (e) => {
-        if (e.target === addServerModal) {
-            addServerModal.style.display = 'none';
-            if (serverNameInput) serverNameInput.value = '';
-        }
+        if (e.target === addServerModal) addServerModal.style.display = 'none';
+    });
+    
+    if (cancelCreateChannelButton) cancelCreateChannelButton.addEventListener('click', () => createChannelModal.style.display = 'none');
+    if (createChannelModal) createChannelModal.addEventListener('click', (e) => {
+        if (e.target === createChannelModal) createChannelModal.style.display = 'none';
     });
 
     // My Profile Modal Logic
     const openMyProfileModal = () => {
         if (!currentUser || !myProfileModal) return;
-        const profileUsernameInput = document.getElementById('profile-username-input');
-        const profileAvatarInput = document.getElementById('profile-avatar-input');
-        const friendCodeDisplay = document.getElementById('friend-code-display');
-
-        if (profileUsernameInput) profileUsernameInput.value = currentUser.displayName;
-        if (profileAvatarInput) profileAvatarInput.value = currentUser.photoURL;
-        if (friendCodeDisplay) friendCodeDisplay.textContent = currentUser.uid;
-        
+        document.getElementById('profile-username-input').value = currentUser.displayName;
+        document.getElementById('profile-avatar-input').value = currentUser.photoURL;
+        document.getElementById('friend-code-display').textContent = currentUser.uid;
         myProfileModal.style.display = 'flex';
     };
-
-    document.querySelectorAll('.user-info-panel').forEach(button => {
-        button.addEventListener('click', openMyProfileModal);
-    });
-
+    document.querySelectorAll('.user-info-panel').forEach(button => button.addEventListener('click', openMyProfileModal));
     if (myProfileModal) {
-        document.getElementById('close-my-profile-modal')?.addEventListener('click', () => {
-            myProfileModal.style.display = 'none';
-        });
-        myProfileModal.addEventListener('click', (e) => {
-            if (e.target === myProfileModal) {
-                myProfileModal.style.display = 'none';
-            }
-        });
+        document.getElementById('close-my-profile-modal')?.addEventListener('click', () => myProfileModal.style.display = 'none');
+        myProfileModal.addEventListener('click', (e) => { if (e.target === myProfileModal) myProfileModal.style.display = 'none'; });
     }
 
     // Settings Modal Logic
-    const openSettingsModal = () => {
-        if (!settingsModal) return;
-
-        // Default to appearance section
-        document.querySelectorAll('.settings-section').forEach(el => el.classList.add('hidden'));
-        document.getElementById('theme-section')?.classList.remove('hidden');
-
-        document.querySelectorAll('.settings-nav-button').forEach(btn => {
-            btn.classList.remove('bg-gray-700', 'text-white');
-            btn.classList.add('text-gray-300', 'hover:bg-gray-700/50', 'hover:text-white');
-        });
-        const themeNavButton = document.querySelector('.settings-nav-button[data-section="theme-section"]');
-        if (themeNavButton) {
-            themeNavButton.classList.add('bg-gray-700', 'text-white');
-        }
-        
-        settingsModal.style.display = 'flex';
-    };
-
-    document.querySelectorAll('.settings-button').forEach(button => {
-        button.addEventListener('click', openSettingsModal);
-    });
-
+    document.querySelectorAll('.settings-button').forEach(button => button.addEventListener('click', () => settingsModal.style.display = 'flex'));
     if (settingsModal) {
-        document.getElementById('close-settings-modal')?.addEventListener('click', () => {
-            settingsModal.style.display = 'none';
-        });
-        settingsModal.addEventListener('click', (e) => {
-            if (e.target === settingsModal) {
-                settingsModal.style.display = 'none';
-            }
-        });
-
-        // Navigation within settings modal
+        document.getElementById('close-settings-modal')?.addEventListener('click', () => settingsModal.style.display = 'none');
         document.querySelectorAll('.settings-nav-button').forEach(button => {
             button.addEventListener('click', () => {
                 const sectionId = button.dataset.section;
-                if (!sectionId) return;
-
                 document.querySelectorAll('.settings-section').forEach(el => el.classList.add('hidden'));
                 document.getElementById(sectionId)?.classList.remove('hidden');
-
-                document.querySelectorAll('.settings-nav-button').forEach(btn => {
-                    btn.classList.remove('bg-gray-700', 'text-white');
-                    btn.classList.add('text-gray-300', 'hover:bg-gray-700/50', 'hover:text-white');
-                });
+                document.querySelectorAll('.settings-nav-button').forEach(btn => btn.classList.remove('bg-gray-700', 'text-white'));
                 button.classList.add('bg-gray-700', 'text-white');
             });
         });
-
-        // Theme selection
         document.querySelectorAll('.theme-option').forEach(button => {
-            button.addEventListener('click', () => {
-                applyTheme(button.dataset.theme);
+            button.addEventListener('click', () => applyTheme(button.dataset.theme));
+        });
+        // Custom theme pickers
+        ['custom-bg-color', 'custom-text-color', 'custom-accent-color'].forEach(id => {
+            document.getElementById(id).addEventListener('input', () => {
+                const colors = {
+                    bg: document.getElementById('custom-bg-color').value,
+                    text: document.getElementById('custom-text-color').value,
+                    accent: document.getElementById('custom-accent-color').value
+                };
+                applyCustomTheme(colors);
             });
         });
     }
 
-    if (serverSettingsButton) serverSettingsButton.addEventListener('click', (e) => {
+    // Server Options & Settings Modal Logic
+    if (openServerSettingsButton) openServerSettingsButton.addEventListener('click', async () => {
+        if (serverSettingsModal && activeServerId) {
+            const serverDoc = await db.collection('servers').doc(activeServerId).get();
+            if(serverDoc.exists) {
+                document.getElementById('settings-server-name').textContent = serverDoc.data().name;
+            }
+            serverSettingsModal.style.display = 'flex';
+        }
+    });
+    if (serverSettingsModal) {
+        document.getElementById('close-server-settings-modal')?.addEventListener('click', () => serverSettingsModal.style.display = 'none');
+    }
+
+    if (serverOptionsButton) serverOptionsButton.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (serverSettingsDropdown) serverSettingsDropdown.classList.toggle('hidden');
+        if (serverOptionsDropdown) serverOptionsDropdown.classList.toggle('hidden');
     });
 
     document.addEventListener('click', (e) => {
-        if (serverSettingsDropdown && !serverSettingsDropdown.classList.contains('hidden')) {
-            serverSettingsDropdown.classList.add('hidden');
+        if (serverOptionsDropdown && !serverOptionsDropdown.classList.contains('hidden')) {
+            serverOptionsDropdown.classList.add('hidden');
         }
         if (emojiPicker && !emojiPicker.classList.contains('hidden') && !emojiPicker.contains(e.target) && e.target !== emojiButton) {
             emojiPicker.classList.add('hidden');
         }
     });
 
+    // Invite Modal Logic
     if (inviteButton) inviteButton.addEventListener('click', async () => {
         const serverDoc = await db.collection('servers').doc(activeServerId).get();
         if (inviteServerName) inviteServerName.textContent = serverDoc.data().name;
-        const friendCodeInput = document.getElementById('friend-code-input');
-        const inviteStatusMessage = document.getElementById('invite-status-message');
-        if (friendCodeInput) friendCodeInput.value = '';
-        if (inviteStatusMessage) inviteStatusMessage.textContent = '';
+        document.getElementById('friend-code-input').value = '';
+        document.getElementById('invite-status-message').textContent = '';
         if (inviteModal) inviteModal.style.display = 'flex';
     });
+    if (cancelInviteButton) cancelInviteButton.addEventListener('click', () => inviteModal.style.display = 'none');
+    if (inviteModal) inviteModal.addEventListener('click', (e) => { if (e.target === inviteModal) inviteModal.style.display = 'none'; });
 
-    if (cancelInviteButton) cancelInviteButton.addEventListener('click', () => {
-        if (inviteModal) inviteModal.style.display = 'none';
-    });
-    
-    if (inviteModal) inviteModal.addEventListener('click', (e) => {
-        if (e.target === inviteModal) {
-            inviteModal.style.display = 'none';
-        }
-    });
-
+    // Message Input & Send Button state
     if (messageInput) messageInput.addEventListener('input', () => {
         if (sendButton) sendButton.disabled = !messageInput.value.trim() && !stagedFile;
     });
@@ -1169,21 +1235,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Emoji Picker Logic
     if (emojiButton && emojiPicker) {
-        EMOJIS.forEach(emoji => {
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'text-2xl p-1 rounded-md hover:bg-gray-700';
-            button.textContent = emoji;
-            button.onclick = () => {
-                if (messageInput) {
-                    messageInput.value += emoji;
-                    messageInput.focus();
-                }
-                if (sendButton) sendButton.disabled = !messageInput.value.trim();
-            };
-            emojiPicker.appendChild(button);
-        });
-
+        if (emojiPicker.childElementCount === 0) { // Populate only once
+            EMOJIS.forEach(emoji => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'text-2xl p-1 rounded-md hover:bg-gray-700';
+                button.textContent = emoji;
+                button.onclick = () => {
+                    if (messageInput) {
+                        messageInput.value += emoji;
+                        messageInput.focus();
+                        sendButton.disabled = !messageInput.value.trim();
+                    }
+                };
+                emojiPicker.appendChild(button);
+            });
+        }
         emojiButton.addEventListener('click', (e) => {
             e.stopPropagation();
             emojiPicker.classList.toggle('hidden');
@@ -1192,14 +1259,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Other User Profile Modal Logic
     if (userProfileModal && closeUserProfileModalButton) {
-        closeUserProfileModalButton.addEventListener('click', () => {
-            userProfileModal.style.display = 'none';
-        });
-        userProfileModal.addEventListener('click', (e) => {
-            if (e.target === userProfileModal) {
-                userProfileModal.style.display = 'none';
-            }
-        });
+        closeUserProfileModalButton.addEventListener('click', () => userProfileModal.style.display = 'none');
+        userProfileModal.addEventListener('click', (e) => { if (e.target === userProfileModal) userProfileModal.style.display = 'none'; });
     }
     
     // Delegated event listener for opening user profiles
