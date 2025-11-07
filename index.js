@@ -29,12 +29,12 @@ const provider = new firebase.auth.GoogleAuthProvider();
 // =================================================================================
 const DEFAULT_AVATAR_SVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%2372767d'/%3E%3C/svg%3E";
 const FAKE_ADS = [
-    { title: 'Conflict Nitro', body: 'Supercharge your chat experience with custom emojis and more!' },
-    { title: 'Gamer GeaR', body: 'Get the latest hardware to dominate the competition.' },
-    { title: 'Server Boosts', body: 'Level up your server with powerful perks.' },
-    { title: 'Learn to Code', body: 'Join our bootcamp and become a master developer in weeks!' },
-    { title: 'Buy Crypto!', body: 'To the moon! Invest in the future of finance today.' },
-    { title: 'Singles In Your Area', body: 'Tired of being alone? Meet other gamers near you now!' },
+    { title: 'Conflict Nitro', body: 'Supercharge your chat experience with custom emojis and more!', link: 'nitro.html' },
+    { title: 'Gamer GeaR', body: 'Get the latest hardware to dominate the competition.', link: 'gamer.html' },
+    { title: 'Server Boosts', body: 'Level up your server with powerful perks.', link: 'boosts.html' },
+    { title: 'Learn to Code', body: 'Join our bootcamp and become a master developer in weeks!', link: 'learncode.html' },
+    { title: 'Buy Crypto!', body: 'To the moon! Invest in the future of finance today.', link: 'crypto.html' },
+    { title: 'Singles In Your Area', body: 'Tired of being alone? Meet other gamers near you now!', link: 'singles.html' },
 ];
 const COMMANDS = [
     { command: '/ad', params: 'yes|no', description: 'Toggle advertisement visibility.' },
@@ -578,13 +578,17 @@ function formatMessageText(text) {
 
 const displayRandomAd = () => {
     const ad = FAKE_ADS[Math.floor(Math.random() * FAKE_ADS.length)];
-    const adContainers = document.querySelectorAll('#home-ad-container, #channel-ad-container');
-    adContainers.forEach(container => {
-        const titleEl = container.querySelector('[data-ad-title]');
-        const bodyEl = container.querySelector('[data-ad-body]');
-        if (titleEl && bodyEl) {
-            titleEl.textContent = ad.title;
-            bodyEl.textContent = ad.body;
+    
+    const adLinkIds = ['home-ad-link', 'channel-ad-link'];
+
+    adLinkIds.forEach(id => {
+        const linkEl = document.getElementById(id);
+        if (linkEl) {
+            linkEl.href = ad.link;
+            const titleEl = linkEl.querySelector('[data-ad-title]');
+            const bodyEl = linkEl.querySelector('[data-ad-body]');
+            if (titleEl) titleEl.textContent = ad.title;
+            if (bodyEl) bodyEl.textContent = ad.body;
         }
     });
 };
