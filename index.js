@@ -1826,14 +1826,45 @@ const listenForDmSignals = (friend) => {
         snapshot.docChanges().forEach(async (change) => {
             if (change.type === 'added') {
                 const signal = change.doc.data();
-                if (signal.type === 'offer') {
-                    await answerDmCall(signal, friend);
-                } else if (signal.type === 'answer' && peerConnections[friend.id]) {
-                    await peerConnections[friend.id].setRemoteDescription(new RTCSessionDescription(signal.payload));
-                } else if (signal.type === 'candidate' && peerConnections[friend.id]) {
-                    await peerConnections[friend.id].addIceCandidate(new RTCIceCandidate(signal.payload));
+                const peerId = signal.from;
+
+                try {
+                    if (signal.type === 'offer') {
+                        // Glare resolution: if we are also trying to make a call, decide who backs down.
+                        const isMakingCall = activeCallInfo && activeCallInfo.type === 'dm' && activeCallInfo.friend.id === peerId;
+                        
+                        // If my UID is higher, I am "impolite" and should back down to answer their call instead.
+                        const amImpolite = isMakingCall && currentUser.uid > peerId;
+
+                        if (amImpolite) {
+                            console.log("Glare detected. Backing off to answer incoming call.");
+                            // The simplest way to handle this is to hangup our initiated call, then answer theirs.
+                            await hangUp(); 
+                            await answerDmCall(signal, friend);
+                        } else if (!isMakingCall) {
+                            // Standard case: we are not making a call, so we answer.
+                            await answerDmCall(signal, friend);
+                        } else {
+                             // We are "polite" (our UID is smaller), so we ignore their offer and expect them to answer ours.
+                            console.log("Glare detected. My UID is lower, letting my offer proceed.");
+                        }
+                    
+                    } else if (signal.type === 'answer' && peerConnections[peerId]) {
+                        // Only set remote description if we are in the correct state
+                        if (peerConnections[peerId].signalingState !== 'stable') {
+                           await peerConnections[peerId].setRemoteDescription(new RTCSessionDescription(signal.payload));
+                        }
+                    } else if (signal.type === 'candidate' && peerConnections[peerId]) {
+                        // Only add candidate if a remote description has been set.
+                        if (peerConnections[peerId].remoteDescription) {
+                           await peerConnections[peerId].addIceCandidate(new RTCIceCandidate(signal.payload));
+                        }
+                    }
+                } catch (error) {
+                    console.error("Error processing signal:", signal.type, error);
+                } finally {
+                    change.doc.ref.delete(); // Cleanup signal regardless of outcome
                 }
-                change.doc.ref.delete();
             }
         });
     });
