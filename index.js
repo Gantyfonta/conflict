@@ -28,6 +28,14 @@ const provider = new firebase.auth.GoogleAuthProvider();
 // Constants
 // =================================================================================
 const DEFAULT_AVATAR_SVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%2372767d'/%3E%3C/svg%3E";
+const FAKE_ADS = [
+    { title: 'Conflict Nitro', body: 'Supercharge your chat experience with custom emojis and more!' },
+    { title: 'Gamer GeaR', body: 'Get the latest hardware to dominate the competition.' },
+    { title: 'Server Boosts', body: 'Level up your server with powerful perks.' },
+    { title: 'Learn to Code', body: 'Join our bootcamp and become a master developer in weeks!' },
+    { title: 'Buy Crypto!', body: 'To the moon! Invest in the future of finance today.' },
+    { title: 'Singles In Your Area', body: 'Tired of being alone? Meet other gamers near you now!' },
+];
 const EMOJIS = [
   '😀', '😁', '😂', '🤣', '😃', '😄', '😅', '😆', '😉', '😊', '😋', '😎', '😍', '😘', '😗', '😙', '😚',
   '🙂', '🤗', '🤔', '🤨', '😐', '😑', '😶', '🙄', '😏', '😣', '😥', '😮', '🤐', '😯', '😪', '😫', '😴',
@@ -398,6 +406,14 @@ auth.onAuthStateChanged(async (user) => {
       setupCallListener();
       selectHome(); // Default to home view on login
 
+      if (localStorage.getItem('adsEnabled') === 'true') {
+          const homeAd = document.getElementById('home-ad-container');
+          const channelAd = document.getElementById('channel-ad-container');
+          displayRandomAd();
+          homeAd?.classList.remove('hidden');
+          channelAd?.classList.remove('hidden');
+      }
+
     } catch (error) {
         console.error("Firestore error:", error);
         loginView.classList.add('hidden');
@@ -544,6 +560,18 @@ function formatMessageText(text) {
     });
 }
 
+const displayRandomAd = () => {
+    const ad = FAKE_ADS[Math.floor(Math.random() * FAKE_ADS.length)];
+    const adContainers = document.querySelectorAll('#home-ad-container, #channel-ad-container');
+    adContainers.forEach(container => {
+        const titleEl = container.querySelector('[data-ad-title]');
+        const bodyEl = container.querySelector('[data-ad-body]');
+        if (titleEl && bodyEl) {
+            titleEl.textContent = ad.title;
+            bodyEl.textContent = ad.body;
+        }
+    });
+};
 
 const renderUserInfo = () => {
   if (!currentUser) return;
@@ -1168,7 +1196,7 @@ const handleSendMessage = async (e) => {
     const sendButton = document.getElementById('send-button');
     const text = messageInput.value.trim();
 
-    if ((!text && !stagedFile) || !currentUser) return;
+    if ((!text && !stagedFile) || !currentUser || messageInput.value.length > 500) return;
     
     // Command handling
     if (text.startsWith('/')) {
@@ -1177,11 +1205,14 @@ const handleSendMessage = async (e) => {
             const homeAd = document.getElementById('home-ad-container');
             const channelAd = document.getElementById('channel-ad-container');
             if (arg === 'yes') {
+                displayRandomAd();
                 homeAd?.classList.remove('hidden');
                 channelAd?.classList.remove('hidden');
+                localStorage.setItem('adsEnabled', 'true');
             } else if (arg === 'no') {
                 homeAd?.classList.add('hidden');
                 channelAd?.classList.add('hidden');
+                localStorage.setItem('adsEnabled', 'false');
             }
             messageInput.value = '';
             cancelFilePreview();
@@ -1923,7 +1954,13 @@ document.getElementById('message-form').addEventListener('submit', handleSendMes
 document.getElementById('add-friend-form').addEventListener('submit', handleAddFriend);
 document.getElementById('message-input').addEventListener('input', (e) => {
     const sendButton = document.getElementById('send-button');
-    sendButton.disabled = !e.target.value.trim() && !stagedFile;
+    const charCounter = document.getElementById('char-counter');
+    const count = e.target.value.length;
+    
+    charCounter.textContent = `${count} / 500`;
+    charCounter.classList.toggle('text-red-400', count > 500);
+
+    sendButton.disabled = (!e.target.value.trim() && !stagedFile) || count > 500;
 });
 
 // File Upload
