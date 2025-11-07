@@ -1185,16 +1185,21 @@ const sendChatMessageWithSpamCheck = async (messageData) => {
 
         if (messagesRef) {
             try {
-                const spamQuery = await messagesRef
-                    .where('user.uid', '==', currentUser.uid)
+                // Fetch recent messages and filter client-side to avoid composite index
+                const recentMessagesQuery = await messagesRef
                     .orderBy('timestamp', 'desc')
-                    .limit(5)
+                    .limit(20) // Fetch more messages to find user's last 5
                     .get();
                 
-                // If the user has sent at least 5 messages previously...
-                if (spamQuery.docs.length === 5) {
+                const userMessages = recentMessagesQuery.docs
+                    .map(doc => doc.data())
+                    .filter(msg => msg.user.uid === currentUser.uid)
+                    .slice(0, 5);
+
+                // If the user has sent at least 5 messages recently...
+                if (userMessages.length === 5) {
                     // ...and they are all identical to the new message...
-                    const isSpam = spamQuery.docs.every(doc => doc.data().text === messageData.text);
+                    const isSpam = userMessages.every(msg => msg.text === messageData.text);
                     if (isSpam) {
                         // ...block the message.
                         console.log("Spam detected, message blocked.");
