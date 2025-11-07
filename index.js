@@ -2014,7 +2014,30 @@ document.querySelectorAll('.settings-button').forEach(btn => btn.addEventListene
 document.getElementById('close-settings-modal').addEventListener('click', () => {
     document.getElementById('settings-modal').style.display = 'none';
 });
-document.getElementById('open-server-settings-button').addEventListener('click', () => {
+document.getElementById('open-server-settings-button').addEventListener('click', async () => {
+    if (!activeServerId) return;
+
+    try {
+        const serverDoc = await db.collection('servers').doc(activeServerId).get();
+        if (serverDoc.exists) {
+            const serverData = serverDoc.data();
+            const nameInput = document.getElementById('server-settings-name-input');
+            const iconUrlInput = document.getElementById('server-settings-icon-url');
+            const iconPreview = document.getElementById('server-settings-icon-preview');
+            
+            if (nameInput) nameInput.value = serverData.name || '';
+            if (iconUrlInput) iconUrlInput.value = serverData.iconUrl || '';
+            if (iconPreview) iconPreview.src = isValidHttpUrl(serverData.iconUrl) ? serverData.iconUrl : DEFAULT_AVATAR_SVG;
+            
+            const statusEl = document.getElementById('server-settings-status');
+            if(statusEl) statusEl.textContent = '';
+        }
+    } catch (error) {
+        console.error("Error fetching server settings:", error);
+        alert("Could not load server settings.");
+        return;
+    }
+
     document.getElementById('server-settings-modal').style.display = 'flex';
 });
 document.getElementById('close-server-settings-modal').addEventListener('click', () => {
@@ -2037,12 +2060,50 @@ document.querySelectorAll('.server-settings-nav-button').forEach(button => {
 document.getElementById('server-overview-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const newName = document.getElementById('server-settings-name-input').value.trim();
-    if (newName && activeServerId) {
-        await db.collection('servers').doc(activeServerId).update({ name: newName });
-        const statusEl = document.getElementById('server-settings-status');
-        statusEl.textContent = 'Saved!';
-        setTimeout(() => { statusEl.textContent = ''; }, 2000);
+    const newIconUrl = document.getElementById('server-settings-icon-url').value.trim();
+    const statusEl = document.getElementById('server-settings-status');
+
+    if (!newName) {
+        alert("Server name cannot be empty.");
+        return;
     }
+    if (!activeServerId) return;
+
+    const updates = { name: newName };
+
+    if (newIconUrl && !isValidHttpUrl(newIconUrl)) {
+        alert("The provided Server Icon URL is not valid. Please enter a full, valid URL or leave it blank.");
+        return;
+    }
+    
+    updates.iconUrl = newIconUrl;
+
+    try {
+        await db.collection('servers').doc(activeServerId).update(updates);
+        statusEl.textContent = 'Saved!';
+        statusEl.className = 'ml-4 text-sm text-green-400';
+        setTimeout(() => { statusEl.textContent = ''; }, 2000);
+    } catch (error) {
+        console.error("Error updating server settings:", error);
+        statusEl.textContent = 'Error saving.';
+        statusEl.className = 'ml-4 text-sm text-red-400';
+        setTimeout(() => { 
+            statusEl.textContent = ''; 
+            statusEl.className = 'ml-4 text-sm text-green-400';
+        }, 3000);
+    }
+});
+document.getElementById('server-settings-icon-url').addEventListener('input', (e) => {
+    const url = e.target.value;
+    const previewImg = document.getElementById('server-settings-icon-preview');
+    if (isValidHttpUrl(url)) {
+        previewImg.src = url;
+    } else if (!url) {
+        previewImg.src = DEFAULT_AVATAR_SVG;
+    }
+});
+document.getElementById('server-settings-icon-preview').addEventListener('error', (e) => {
+    e.target.src = DEFAULT_AVATAR_SVG;
 });
 document.getElementById('create-role-form').addEventListener('submit', handleCreateRole);
 

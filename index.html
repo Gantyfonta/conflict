@@ -471,6 +471,13 @@
                     <div id="overview-section" class="server-settings-section">
                          <h2 class="text-2xl font-bold mb-6">Server Overview</h2>
                          <form id="server-overview-form">
+                            <div class="mb-6 flex items-center space-x-4">
+                                <img id="server-settings-icon-preview" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%2372767d'/%3E%3C/svg%3E" alt="Server Icon" class="w-20 h-20 rounded-full object-cover bg-gray-900 flex-shrink-0">
+                                <div class="flex-1">
+                                    <label for="server-settings-icon-url" class="text-xs font-bold uppercase text-gray-400">Server Icon URL</label>
+                                    <input id="server-settings-icon-url" type="url" class="w-full bg-gray-800 border border-gray-900 rounded-md p-2 mt-1 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="https://example.com/icon.png">
+                                </div>
+                            </div>
                              <div class="mb-4">
                                 <label for="server-settings-name-input" class="text-xs font-bold uppercase text-gray-400">Server Name</label>
                                 <input id="server-settings-name-input" type="text" class="w-full bg-gray-800 border border-gray-900 rounded-md p-2 mt-1 text-white focus:outline-none focus:ring-2 focus:ring-blue-500" required />
