@@ -36,6 +36,17 @@ const FAKE_ADS = [
     { title: 'Buy Crypto!', body: 'To the moon! Invest in the future of finance today.' },
     { title: 'Singles In Your Area', body: 'Tired of being alone? Meet other gamers near you now!' },
 ];
+const COMMANDS = [
+    { command: '/ad', params: 'yes|no', description: 'Toggle advertisement visibility.' },
+    { command: '/tetris', params: '', description: 'Play a game of Tetris.' },
+    { command: '/coinflip', params: '', description: 'Flip a coin.' },
+    { command: '/dice', params: '', description: 'Roll a 6-sided die.' },
+    { command: '/shrug', params: '', description: 'Insert the shrug emoticon.' },
+    { command: '/italic', params: '<message>', description: 'Send your message in italics.' },
+    { command: '/bold', params: '<message>', description: 'Send your message in bold.' },
+    { command: '/font', params: '<font> <message>', description: 'Send message in a specific font.' },
+    { command: '/size', params: '<num> <message>', description: 'Change text size (authorized users only).', restricted: true },
+];
 const EMOJIS = [
   '😀', '😁', '😂', '🤣', '😃', '😄', '😅', '😆', '😉', '😊', '😋', '😎', '😍', '😘', '😗', '😙', '😚',
   '🙂', '🤗', '🤔', '🤨', '😐', '😑', '😶', '🙄', '😏', '😣', '😥', '😮', '🤐', '😯', '😪', '😫', '😴',
@@ -390,11 +401,11 @@ auth.onAuthStateChanged(async (user) => {
         }
         
         await userDocRef.set({ displayName, photoURL, status: 'online', friends: [] });
-        currentUser = { uid: user.uid, displayName, photoURL };
+        currentUser = { uid: user.uid, displayName, photoURL, email: user.email };
       } else {
         await userDocRef.update({ status: 'online' });
         const userData = userDoc.data();
-        currentUser = { uid: user.uid, displayName: userData.displayName, photoURL: userData.photoURL };
+        currentUser = { uid: user.uid, displayName: userData.displayName, photoURL: userData.photoURL, email: user.email };
       }
       
       loginView.classList.add('hidden');
@@ -553,6 +564,7 @@ function escapeHTML(str) {
 }
 
 function formatMessageText(text) {
+    if (!text) return '';
     let escapedText = escapeHTML(text);
     const codeBlockRegex = /```txt\n([\s\S]*?)\n```/g;
     return escapedText.replace(codeBlockRegex, (match, codeContent) => {
@@ -715,6 +727,16 @@ const renderMessages = (messages) => {
 
     messageList.innerHTML = ''; // Clear existing messages
 
+    const renderMessageContent = (msg) => {
+        if (msg.html) {
+            return msg.html; // Already safe HTML from a command
+        }
+        if (msg.text) {
+            return formatMessageText(msg.text);
+        }
+        return '';
+    };
+
     messages.forEach(msg => {
         const messageEl = document.createElement('div');
         const currentTimestamp = msg.timestamp ? msg.timestamp.toDate() : new Date();
@@ -732,7 +754,7 @@ const renderMessages = (messages) => {
             // Render a compact message
             messageEl.className = 'flex items-center pl-14 pr-4 py-0.5 hover:bg-gray-800/50 group';
             messageEl.innerHTML = `
-                <div class="text-gray-200 whitespace-pre-wrap break-all flex-1 min-w-0">${formatMessageText(msg.text)}</div>
+                <div class="text-gray-200 whitespace-pre-wrap break-all flex-1 min-w-0">${renderMessageContent(msg)}</div>
                 <span class="text-xs text-gray-500 ml-auto pl-4 opacity-0 group-hover:opacity-100 transition-opacity">${msg.timestamp ? new Date(msg.timestamp.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
             `;
         } else {
@@ -748,7 +770,7 @@ const renderMessages = (messages) => {
                         <span class="font-semibold mr-2 cursor-pointer" style="color: ${roleColor};" data-userid="${msg.user.uid}">${msg.user.displayName}</span>
                         <span class="text-xs text-gray-500">${timestamp}</span>
                     </div>
-                    ${msg.text ? `<div class="text-gray-200 whitespace-pre-wrap break-all">${formatMessageText(msg.text)}</div>` : ''}
+                    ${msg.text || msg.html ? `<div class="text-gray-200 whitespace-pre-wrap break-all">${renderMessageContent(msg)}</div>` : ''}
                 </div>
             `;
         }
@@ -1198,94 +1220,120 @@ const handleSendMessage = async (e) => {
 
     if ((!text && !stagedFile) || !currentUser || messageInput.value.length > 500) return;
     
-    // Command handling
-    if (text.startsWith('/')) {
-        if (text.startsWith('/ad ')) {
-            const arg = text.substring(4).toLowerCase();
-            const homeAd = document.getElementById('home-ad-container');
-            const channelAd = document.getElementById('channel-ad-container');
-            if (arg === 'yes') {
-                displayRandomAd();
-                homeAd?.classList.remove('hidden');
-                channelAd?.classList.remove('hidden');
-                localStorage.setItem('adsEnabled', 'true');
-            } else if (arg === 'no') {
-                homeAd?.classList.add('hidden');
-                channelAd?.classList.add('hidden');
-                localStorage.setItem('adsEnabled', 'false');
+    document.getElementById('command-suggestions').classList.add('hidden');
+
+    // Handle commands that don't create a message
+    if (text.startsWith('/ad ')) {
+        const arg = text.substring(4).toLowerCase();
+        const homeAd = document.getElementById('home-ad-container');
+        const channelAd = document.getElementById('channel-ad-container');
+        if (arg === 'yes') {
+            displayRandomAd();
+            homeAd?.classList.remove('hidden');
+            channelAd?.classList.remove('hidden');
+            localStorage.setItem('adsEnabled', 'true');
+        } else if (arg === 'no') {
+            homeAd?.classList.add('hidden');
+            channelAd?.classList.add('hidden');
+            localStorage.setItem('adsEnabled', 'false');
+        }
+        messageInput.value = '';
+        messageInput.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
+    }
+    if (text === '/tetris') {
+        const tetrisWindow = window.open('', 'tetris', 'width=450,height=500,resizable=yes');
+        if (tetrisWindow) {
+            tetrisWindow.document.write(tetrisHTML);
+            tetrisWindow.document.close();
+        }
+        messageInput.value = '';
+        messageInput.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
+    }
+    if (text === '/admin') {
+        if (auth.currentUser && auth.currentUser.email === 'nineteenp2@gmail.com') {
+            const adminWindow = window.open('', 'adminPanel', 'width=550,height=350,resizable=yes');
+            if (adminWindow) {
+                adminWindow.document.write(adminPanelHTML);
+                adminWindow.document.close();
             }
-            messageInput.value = '';
-            cancelFilePreview();
-            messageInput.dispatchEvent(new Event('input', { bubbles: true }));
-            return;
         }
-        if (text === '/tetris') {
-            const tetrisWindow = window.open('', 'tetris', 'width=450,height=500,resizable=yes');
-            if (tetrisWindow) {
-                tetrisWindow.document.write(tetrisHTML);
-                tetrisWindow.document.close();
-            }
-            messageInput.value = '';
-            cancelFilePreview();
-            messageInput.dispatchEvent(new Event('input', { bubbles: true }));
-            return;
-        }
-        if (text === '/admin') {
-            if (auth.currentUser && auth.currentUser.email === 'nineteenp2@gmail.com') {
-                const adminWindow = window.open('', 'adminPanel', 'width=550,height=350,resizable=yes');
-                if (adminWindow) {
-                    adminWindow.document.write(adminPanelHTML);
-                    adminWindow.document.close();
-                }
-            }
-            messageInput.value = '';
-            cancelFilePreview();
-            messageInput.dispatchEvent(new Event('input', { bubbles: true }));
-            return;
-        }
-        let commandResultText = null;
-        if (text === '/coinflip') commandResultText = Math.random() < 0.5 ? 'Heads' : 'Tails';
-        else if (text === '/dice') commandResultText = `${Math.floor(Math.random() * 6) + 1}`;
-        else if (text === '/shrug') commandResultText = '¯\\_(ツ)_/¯';
-        
-        if (commandResultText) {
-            await sendMessage({
-                text: commandResultText,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                user: { uid: currentUser.uid, displayName: currentUser.displayName, photoURL: currentUser.photoURL }
-            });
-            messageInput.value = '';
-            cancelFilePreview();
-            messageInput.dispatchEvent(new Event('input'));
-            return;
-        }
+        messageInput.value = '';
+        messageInput.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
     }
     
+    let messageObject;
+
+    // If a file is staged, ignore all commands and treat input as plain text.
+    if (stagedFile) {
+        const fileContent = await readFileAsText(stagedFile);
+        const fileBlock = `\n\n\`\`\`txt\n${fileContent}\n\`\`\``;
+        messageObject = { text: text + fileBlock };
+    } else if (text.startsWith('/')) {
+        const [command, ...args] = text.split(' ');
+        const msgContent = args.join(' ');
+        let handled = false;
+
+        if (command === '/italic' && msgContent) {
+            messageObject = { html: `<em>${escapeHTML(msgContent)}</em>` };
+            handled = true;
+        } else if (command === '/bold' && msgContent) {
+            messageObject = { html: `<strong>${escapeHTML(msgContent)}</strong>` };
+            handled = true;
+        } else if (command === '/font' && args.length >= 2) {
+            const font = args[0];
+            const msg = args.slice(1).join(' ');
+            const safeFont = /^[a-zA-Z0-9\s,-]+$/.test(font) ? font : 'sans-serif';
+            messageObject = { html: `<span style="font-family: ${escapeHTML(safeFont)};">${escapeHTML(msg)}</span>` };
+            handled = true;
+        } else if (command === '/size' && args.length >= 2) {
+            const allowedEmails = ['28gkarfonta@catholiccentral.net', 'ninteenp2@gmail.com'];
+            if (currentUser && allowedEmails.includes(currentUser.email)) {
+                const size = parseInt(args[0], 10);
+                const msg = args.slice(1).join(' ');
+                if (!isNaN(size) && size >= 8 && size <= 48) {
+                    messageObject = { html: `<span style="font-size: ${size}px;">${escapeHTML(msg)}</span>` };
+                    handled = true;
+                }
+            }
+        } else if (command === '/coinflip') {
+            messageObject = { text: Math.random() < 0.5 ? 'Heads' : 'Tails' };
+            handled = true;
+        } else if (command === '/dice') {
+            messageObject = { text: `${Math.floor(Math.random() * 6) + 1}` };
+            handled = true;
+        } else if (command === '/shrug') {
+            messageObject = { text: '¯\\_(ツ)_/¯' };
+            handled = true;
+        }
+
+        if (!handled) {
+            messageObject = { text: text }; // Unrecognized command
+        }
+    } else {
+        messageObject = { text: text }; // Not a command
+    }
+    
+    if (!messageObject || (!messageObject.text && !messageObject.html)) {
+        return; // Nothing to send
+    }
+
     sendButton.disabled = true;
     
-    // Logic for sending file or text message
     try {
-        let messageText;
-        if (stagedFile) {
-            const fileContent = await readFileAsText(stagedFile);
-            messageText = text 
-                ? `${text}\n\n\`\`\`txt\n${fileContent}\n\`\`\`` 
-                : `\`\`\`txt\n${fileContent}\n\`\`\``;
+        messageObject.timestamp = firebase.firestore.FieldValue.serverTimestamp();
+        messageObject.user = { uid: currentUser.uid, displayName: currentUser.displayName, photoURL: currentUser.photoURL };
+        
+        if (messageObject.text) {
+            await sendChatMessageWithSpamCheck(messageObject);
         } else {
-            messageText = text;
+            await sendMessage(messageObject);
         }
-
-        await sendChatMessageWithSpamCheck({
-            text: messageText,
-            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-            user: { uid: currentUser.uid, displayName: currentUser.displayName, photoURL: currentUser.photoURL }
-        });
         
         messageInput.value = '';
-        if (stagedFile) {
-            cancelFilePreview();
-        }
-
+        cancelFilePreview();
     } catch (error) {
         console.error("Error sending message:", error);
         alert("Failed to send message.");
@@ -1908,6 +1956,34 @@ const hangUp = async () => {
     }
 };
 
+const renderCommandSuggestions = (commands) => {
+    const container = document.getElementById('command-suggestions');
+    const messageInput = document.getElementById('message-input');
+    container.innerHTML = '';
+    if (commands.length === 0) {
+        container.classList.add('hidden');
+        return;
+    }
+
+    commands.forEach(cmd => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'w-full text-left p-2 hover:bg-gray-700 rounded-md flex items-baseline';
+        btn.innerHTML = `
+            <span class="font-semibold text-white">${cmd.command}</span>
+            <span class="text-gray-400 ml-2 truncate">${cmd.params}</span>
+            <span class="text-gray-500 ml-auto pl-4 text-xs truncate">${cmd.description}</span>
+        `;
+        btn.onclick = () => {
+            messageInput.value = cmd.command + ' ';
+            messageInput.focus();
+            container.classList.add('hidden');
+        };
+        container.appendChild(btn);
+    });
+
+    container.classList.remove('hidden');
+};
 
 // =================================================================================
 // Event Listeners
@@ -1961,6 +2037,31 @@ document.getElementById('message-input').addEventListener('input', (e) => {
     charCounter.classList.toggle('text-red-400', count > 500);
 
     sendButton.disabled = (!e.target.value.trim() && !stagedFile) || count > 500;
+    
+    const text = e.target.value;
+    const suggestionsContainer = document.getElementById('command-suggestions');
+
+    if (stagedFile) {
+        suggestionsContainer.classList.add('hidden');
+        return;
+    }
+
+    if (text.startsWith('/')) {
+        const searchTerm = text.substring(1).toLowerCase().split(' ')[0];
+        const allowedEmails = ['28gkarfonta@catholiccentral.net', 'ninteenp2@gmail.com'];
+        const isAuthorized = currentUser && allowedEmails.includes(currentUser.email);
+
+        let filteredCommands = COMMANDS.filter(cmd => {
+            if (cmd.restricted && !isAuthorized) {
+                return false;
+            }
+            return cmd.command.substring(1).startsWith(searchTerm);
+        });
+        
+        renderCommandSuggestions(filteredCommands);
+    } else {
+        suggestionsContainer.classList.add('hidden');
+    }
 });
 
 // File Upload
