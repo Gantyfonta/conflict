@@ -2,6 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Conflict</title>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -232,12 +233,6 @@
         <nav id="channel-list" class="flex-1 p-2 space-y-1 overflow-y-auto">
           <!-- Channels rendered by JS -->
         </nav>
-
-        <!-- Persistent Server Call Bar -->
-        <div id="persistent-call-bar" class="hidden p-2 bg-gray-900/80 border-t border-gray-900/50">
-             <!-- Content Rendered by JS -->
-        </div>
-
         <footer class="h-14 bg-gray-900/50 p-2 flex items-center justify-between">
             <button class="user-info-panel flex items-center truncate text-left hover:bg-gray-700/50 p-1 rounded-md flex-1">
                 <!-- User info rendered by JS -->
@@ -309,12 +304,13 @@
         </div>
         
         <!-- Video Call View -->
-        <div id="video-call-view" class="hidden absolute inset-0 bg-gray-900 z-30 flex flex-col items-center justify-center p-4">
-            <div id="video-grid" class="flex-1 w-full h-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                 <!-- Video elements will be dynamically added here -->
-            </div>
-            <div id="video-call-status" class="hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center text-white bg-black/50 p-4 rounded-lg flex-col items-center space-y-4">
+        <div id="video-call-view" class="hidden absolute inset-0 bg-gray-900 z-30 flex flex-col items-center justify-center">
+            <video id="remote-video" autoplay playsinline class="w-full h-full object-cover"></video>
+            <div id="video-call-status" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center text-white bg-black/50 p-4 rounded-lg flex flex-col items-center space-y-4">
                  <!-- Status info will be rendered by JS -->
+            </div>
+            <div id="local-video-container" class="absolute top-4 right-4 w-48 h-36 bg-black rounded-lg shadow-lg overflow-hidden border-2 border-gray-700 cursor-move" style="display: none;">
+                <video id="local-video" autoplay muted playsinline class="w-full h-full object-cover"></video>
             </div>
             <div id="video-call-controls" class="absolute bottom-8 flex items-center space-x-4 p-3 bg-black/50 rounded-full" style="display: none;">
                  <!-- Buttons will be rendered by JS -->
@@ -324,7 +320,7 @@
       
       <!-- Version Number -->
       <div class="absolute bottom-1 right-2 text-xs text-gray-500">
-          v3.7
+          v2.7
       </div>
 
 
