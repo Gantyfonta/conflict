@@ -601,7 +601,7 @@ const renderServers = (servers) => {
             <button class="flex items-center justify-center w-12 h-12 rounded-3xl transition-all duration-200 group-hover:rounded-2xl ${isActive ? 'bg-blue-500 rounded-2xl' : 'bg-gray-700 hover:bg-blue-500'} focus:outline-none">
                 <img src="${iconUrl}" alt="${server.name}" class="w-full h-full object-cover rounded-3xl group-hover:rounded-2xl transition-all duration-200" />
             </button>
-            <span class="absolute left-16 p-2 text-sm bg-gray-900 text-white rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10 pointer-events-none">${server.name}</span>
+            <span class="absolute left-16 p-2 text-sm bg-gray-900 text-white rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10 pointer-events-none">${escapeHTML(server.name)}</span>
         `;
         serverIcon.querySelector('button').onclick = () => selectServer(server.id);
         serverListElement.appendChild(serverIcon);
@@ -704,7 +704,7 @@ const renderMessages = (messages) => {
             // Render a compact message
             messageEl.className = 'flex items-center pl-14 pr-4 py-0.5 hover:bg-gray-800/50 group';
             messageEl.innerHTML = `
-                <div class="text-gray-200 whitespace-pre-wrap break-words">${formatMessageText(msg.text)}</div>
+                <div class="text-gray-200 whitespace-pre-wrap break-all flex-1 min-w-0">${formatMessageText(msg.text)}</div>
                 <span class="text-xs text-gray-500 ml-auto pl-4 opacity-0 group-hover:opacity-100 transition-opacity">${msg.timestamp ? new Date(msg.timestamp.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
             `;
         } else {
@@ -715,12 +715,12 @@ const renderMessages = (messages) => {
             
             messageEl.innerHTML = `
                 <img src="${messageUserAvatar}" alt="${msg.user.displayName}" class="w-10 h-10 rounded-full mr-4 cursor-pointer object-cover flex-shrink-0" data-userid="${msg.user.uid}" />
-                <div>
+                <div class="min-w-0 flex-1">
                     <div class="flex items-baseline">
                         <span class="font-semibold mr-2 cursor-pointer" style="color: ${roleColor};" data-userid="${msg.user.uid}">${msg.user.displayName}</span>
                         <span class="text-xs text-gray-500">${timestamp}</span>
                     </div>
-                    ${msg.text ? `<div class="text-gray-200 whitespace-pre-wrap break-words">${formatMessageText(msg.text)}</div>` : ''}
+                    ${msg.text ? `<div class="text-gray-200 whitespace-pre-wrap break-all">${formatMessageText(msg.text)}</div>` : ''}
                 </div>
             `;
         }
@@ -1169,11 +1169,25 @@ const handleSendMessage = async (e) => {
     const text = messageInput.value.trim();
 
     if ((!text && !stagedFile) || !currentUser) return;
-
-    sendButton.disabled = true;
-
+    
     // Command handling
     if (text.startsWith('/')) {
+        if (text.startsWith('/ad ')) {
+            const arg = text.substring(4).toLowerCase();
+            const homeAd = document.getElementById('home-ad-container');
+            const channelAd = document.getElementById('channel-ad-container');
+            if (arg === 'yes') {
+                homeAd?.classList.remove('hidden');
+                channelAd?.classList.remove('hidden');
+            } else if (arg === 'no') {
+                homeAd?.classList.add('hidden');
+                channelAd?.classList.add('hidden');
+            }
+            messageInput.value = '';
+            cancelFilePreview();
+            messageInput.dispatchEvent(new Event('input', { bubbles: true }));
+            return;
+        }
         if (text === '/tetris') {
             const tetrisWindow = window.open('', 'tetris', 'width=450,height=500,resizable=yes');
             if (tetrisWindow) {
@@ -1215,6 +1229,8 @@ const handleSendMessage = async (e) => {
             return;
         }
     }
+    
+    sendButton.disabled = true;
     
     // Logic for sending file or text message
     try {
