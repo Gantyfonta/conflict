@@ -353,6 +353,9 @@ let activeServerMembers = {}; // { userId: { roles: [...] } }
 let allServerUsers = []; // { id, displayName, photoURL, status }
 let stagedFile = null;
 let draggedRoleId = null;
+let unreadChannels = new Set();
+let unreadDms = new Set();
+let lastSeenTimestamps = {};
 
 // Unsubscribe listeners
 let messageUnsubscribe = () => {};
@@ -364,6 +367,10 @@ let callListenerUnsubscribe = () => {};
 let currentCallUnsubscribe = () => {};
 let invitationsUnsubscribe = () => {};
 
+// Audio Notifications
+const messageSound = new Audio('https://cdn.pixabay.com/download/audio/2021/08/04/audio_bb630cc098.mp3');
+const callSound = new Audio('https://cdn.pixabay.com/download/audio/2022/10/14/audio_a7587d5502.mp3');
+callSound.loop = true;
 
 // WebRTC State
 let peerConnection;
@@ -409,6 +416,8 @@ auth.onAuthStateChanged(async (user) => {
         const userData = userDoc.data();
         currentUser = { uid: user.uid, displayName: userData.displayName, photoURL: userData.photoURL, email: user.email, blockedUsers: userData.blockedUsers || [] };
       }
+      
+      lastSeenTimestamps = JSON.parse(localStorage.getItem('lastSeenTimestamps')) || {};
       
       loginView.classList.add('hidden');
       appView.classList.remove('hidden');
@@ -641,10 +650,12 @@ const renderServers = (servers) => {
 
     servers.forEach(server => {
         const isActive = server.id === activeServerId;
+        const isUnread = server.hasUnread;
         const serverIcon = document.createElement('div');
         serverIcon.className = "relative group mb-2";
         const iconUrl = isValidHttpUrl(server.iconUrl) ? server.iconUrl : DEFAULT_AVATAR_SVG;
         serverIcon.innerHTML = `
+            <div class="absolute -left-3 top-1/2 -translate-y-1/2 w-2 h-2 bg-white rounded-full ${isUnread ? '' : 'hidden'}"></div>
             <div class="absolute left-0 h-0 w-1 bg-white rounded-r-full transition-all duration-200 ${isActive ? 'h-10' : 'group-hover:h-5'}"></div>
             <button class="flex items-center justify-center w-12 h-12 rounded-3xl transition-all duration-200 group-hover:rounded-2xl ${isActive ? 'bg-blue-500 rounded-2xl' : 'bg-gray-700 hover:bg-blue-500'} focus:outline-none">
                 <img src="${iconUrl}" alt="${server.name}" class="w-full h-full object-cover rounded-3xl group-hover:rounded-2xl transition-all duration-200" />
@@ -697,9 +708,11 @@ const renderChannels = (server, channels) => {
     
     channels.forEach(channel => {
         const isActive = channel.id === activeChannelId;
+        const isUnread = unreadChannels.has(channel.id) && !isActive;
         const channelLink = document.createElement('button');
-        channelLink.className = `flex items-center w-full px-2 py-1.5 text-left rounded-md transition-colors duration-150 ${isActive ? 'bg-gray-600 text-white' : 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-200'}`;
+        channelLink.className = `relative flex items-center w-full px-2 py-1.5 text-left rounded-md transition-colors duration-150 ${isActive ? 'bg-gray-600 text-white' : 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-200'}`;
         channelLink.innerHTML = `
+            ${isUnread ? '<div class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-2 bg-white rounded-r-full"></div>' : ''}
             <svg class="w-5 h-5 mr-2 text-gray-500" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M10 9h4V7h-4v2zm-2 4h4v-2H8v2zm10-4v2h-4V9h4zm2-2h-4V5h4v2zm-4 8h4v-2h-4v2zm-2-4h-4v2h4v-2zm-2 4h2v2h-2v-2zm-6-4H4v2h2v-2zM6 7H4v2h2V7zm10 10v-2h-4v2h4zm-6 0v-2H8v2h2z"></path></svg>
             <span class="font-medium truncate">${channel.name}</span>
         `;
@@ -713,19 +726,35 @@ const renderFriends = (friends) => {
     if (!friendList) return;
 
     friendList.innerHTML = `<h2 class="text-xs font-bold tracking-wider text-gray-400 uppercase px-2 pt-2 pb-1">Friends — ${friends.length}</h2>`;
+    if (friends.length === 0) {
+        friendList.innerHTML += `<p class="text-sm text-gray-400 px-2 pt-2">Wumpus has no friends. Add one above!</p>`;
+        return;
+    }
+
     friends.forEach(friend => {
-        const friendEl = document.createElement('button');
+        const friendEl = document.createElement('div');
         const isActive = activeView === 'home' && activeChannelId === getDmChannelId(friend.id);
+        const isUnread = unreadDms.has(getDmChannelId(friend.id)) && !isActive;
         const friendAvatarUrl = isValidHttpUrl(friend.photoURL) ? friend.photoURL : DEFAULT_AVATAR_SVG;
-        friendEl.className = `flex items-center w-full px-2 py-1.5 text-left rounded-md transition-colors duration-150 ${isActive ? 'bg-gray-600 text-white' : 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-200'}`;
+        
+        friendEl.className = `relative flex items-center justify-between w-full px-2 py-1.5 text-left rounded-md group transition-colors duration-150 ${isActive ? 'bg-gray-600 text-white' : 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-200'}`;
+        
+        friendEl.dataset.friendId = friend.id;
+        friendEl.dataset.friendName = friend.displayName;
+
         friendEl.innerHTML = `
-            <div class="relative mr-2">
-                <img src="${friendAvatarUrl}" alt="${friend.displayName}" class="w-8 h-8 rounded-full object-cover" data-userid="${friend.id}" />
-                <div class="absolute bottom-0 right-0 w-2.5 h-2.5 ${friend.status === 'online' ? 'bg-green-500' : 'bg-gray-500'} border-2 border-gray-800 rounded-full"></div>
+            ${isUnread ? '<div class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-2 bg-white rounded-r-full"></div>' : ''}
+            <div class="flex items-center truncate flex-1 cursor-pointer dm-button">
+                <div class="relative mr-2">
+                    <img src="${friendAvatarUrl}" alt="${friend.displayName}" class="w-8 h-8 rounded-full object-cover" data-userid="${friend.id}" />
+                    <div class="absolute bottom-0 right-0 w-2.5 h-2.5 ${friend.status === 'online' ? 'bg-green-500' : 'bg-gray-500'} border-2 border-gray-800 rounded-full"></div>
+                </div>
+                <span class="font-medium truncate" data-userid="${friend.id}">${friend.displayName}</span>
             </div>
-            <span class="font-medium truncate" data-userid="${friend.id}">${friend.displayName}</span>
+            <button class="remove-friend-btn opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 p-1 rounded-full focus:outline-none z-10" title="Remove Friend">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
         `;
-        friendEl.onclick = () => selectDmChannel(friend);
         friendList.appendChild(friendEl);
     });
 };
@@ -1055,15 +1084,32 @@ const loadServers = () => {
     
     serversUnsubscribe = db.collection('servers')
         .where('members', 'array-contains', currentUser.uid)
-        .onSnapshot((snapshot) => {
-            const userServers = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-            renderServers(userServers);
+        .onSnapshot(async (snapshot) => {
+            const serverDocs = snapshot.docs;
+            const serversWithUnread = [];
+            
+            for (const serverDoc of serverDocs) {
+                const server = { id: serverDoc.id, ...serverDoc.data() };
+                const channelsSnapshot = await db.collection('servers').doc(server.id).collection('channels').get();
+                let hasUnread = false;
+                channelsSnapshot.forEach(channelDoc => {
+                    const channel = { id: channelDoc.id, ...channelDoc.data() };
+                    if (channel.lastMessage && channel.lastMessage.timestamp?.toMillis() > (lastSeenTimestamps[channel.id] || 0)) {
+                        unreadChannels.add(channel.id);
+                        hasUnread = true;
+                    }
+                });
+                server.hasUnread = hasUnread;
+                serversWithUnread.push(server);
+            }
 
-            if (activeView !== 'home' && !activeServerId && userServers.length > 0) {
-                selectServer(userServers[0].id);
-            } else if (userServers.length === 0 && activeView !== 'home') {
+            renderServers(serversWithUnread);
+
+            if (activeView !== 'home' && !activeServerId && serversWithUnread.length > 0) {
+                selectServer(serversWithUnread[0].id);
+            } else if (serversWithUnread.length === 0 && activeView !== 'home') {
                 selectHome();
-            } else if (activeServerId && !userServers.some(s => s.id === activeServerId)) {
+            } else if (activeServerId && !serversWithUnread.some(s => s.id === activeServerId)) {
                 selectHome();
             }
         }, (error) => {
@@ -1090,7 +1136,30 @@ const loadFriends = () => {
             const friendIds = userData.friends || [];
             if (friendIds.length > 0) {
                 const friendDocs = await db.collection('users').where(firebase.firestore.FieldPath.documentId(), 'in', friendIds).get();
-                const friends = friendDocs.docs.map(d => ({ id: d.id, ...d.data() }));
+                let friends = friendDocs.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                const lastMessagePromises = friends.map(friend => {
+                    const dmChannelId = getDmChannelId(friend.id);
+                    return db.collection('dms').doc(dmChannelId).collection('messages').orderBy('timestamp', 'desc').limit(1).get()
+                        .then(snapshot => {
+                            if (!snapshot.empty) {
+                                const lastMessage = snapshot.docs[0].data();
+                                friend.lastMessageTimestamp = lastMessage.timestamp;
+                                if (lastMessage.timestamp?.toMillis() > (lastSeenTimestamps[dmChannelId] || 0)) {
+                                    unreadDms.add(dmChannelId);
+                                } else {
+                                    unreadDms.delete(dmChannelId);
+                                }
+                            } else {
+                                friend.lastMessageTimestamp = null;
+                            }
+                        });
+                });
+
+                await Promise.all(lastMessagePromises);
+                
+                friends.sort((a, b) => (b.lastMessageTimestamp?.toMillis() || 0) - (a.lastMessageTimestamp?.toMillis() || 0));
+
                 renderFriends(friends);
             } else {
                 renderFriends([]);
@@ -1147,11 +1216,7 @@ const selectHome = async () => {
         `;
     }
 
-    // Re-render servers to update active state
-    db.collection('servers').where('members', 'array-contains', currentUser.uid).get().then(snap => {
-        renderServers(snap.docs.map(d => ({id: d.id, ...d.data()})));
-    });
-    // Re-render friends list to clear active state
+    loadServers();
     loadFriends();
 };
 
@@ -1177,10 +1242,7 @@ const selectServer = async (serverId) => {
     if(channelListPanel) channelListPanel.style.display = 'flex';
     if(userListAside) userListAside.style.display = 'block';
 
-    // Re-render servers to update active state
-    const snapshot = await db.collection('servers').where('members', 'array-contains', currentUser.uid).get();
-    const allUserServers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    renderServers(allUserServers);
+    loadServers();
 
     if(placeholderView) placeholderView.style.display = 'flex';
     if(chatView) chatView.style.display = 'none';
@@ -1243,6 +1305,13 @@ const selectChannel = (channelId) => {
     activeChannelId = channelId;
     if (messageUnsubscribe) messageUnsubscribe();
 
+    lastSeenTimestamps[channelId] = Date.now();
+    localStorage.setItem('lastSeenTimestamps', JSON.stringify(lastSeenTimestamps));
+    unreadChannels.delete(channelId);
+    
+    // Trigger re-render of servers and channels to remove indicators
+    loadServers();
+
     const placeholderView = document.getElementById('placeholder-view');
     const chatView = document.getElementById('chat-view');
     const chatHeader = document.getElementById('chat-header');
@@ -1265,23 +1334,29 @@ const selectChannel = (channelId) => {
     });
 
     messageUnsubscribe = channelRef.collection('messages').orderBy('timestamp', 'asc').onSnapshot((snapshot) => {
+        snapshot.docChanges().forEach(change => {
+            if (change.type === 'added' && change.doc.data().user.uid !== currentUser.uid) {
+                if(document.visibilityState === 'visible') {
+                    messageSound.play().catch(e => console.warn("Audio play failed.", e));
+                }
+            }
+        });
         const messages = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
         renderMessages(messages);
-    });
-
-    // Re-render channels to show active state
-    db.collection('servers').doc(activeServerId).get().then((serverDoc) => {
-        db.collection('servers').doc(activeServerId).collection('channels').orderBy('name').get().then((channelDocs) => {
-            renderChannels(serverDoc.data(), channelDocs.docs.map((d) => ({ id: d.id, ...d.data() })));
-        });
     });
 };
 
 const selectDmChannel = async (friend) => {
     await hangUp();
-    activeChannelId = getDmChannelId(friend.id);
+    const dmChannelId = getDmChannelId(friend.id);
+    activeChannelId = dmChannelId;
     if (messageUnsubscribe) messageUnsubscribe();
     
+    lastSeenTimestamps[dmChannelId] = Date.now();
+    localStorage.setItem('lastSeenTimestamps', JSON.stringify(lastSeenTimestamps));
+    unreadDms.delete(dmChannelId);
+    loadFriends();
+
     const placeholderView = document.getElementById('placeholder-view');
     const chatView = document.getElementById('chat-view');
     const userListAside = document.getElementById('user-list-aside');
@@ -1311,19 +1386,32 @@ const selectDmChannel = async (friend) => {
 
     if(messageInput) messageInput.placeholder = `Message @${friend.displayName}`;
 
-    const dmRef = db.collection('dms').doc(activeChannelId);
+    const dmRef = db.collection('dms').doc(dmChannelId);
     messageUnsubscribe = dmRef.collection('messages').orderBy('timestamp', 'asc').onSnapshot((snapshot) => {
+        snapshot.docChanges().forEach(change => {
+            if (change.type === 'added' && change.doc.data().user.uid !== currentUser.uid) {
+                if(document.visibilityState === 'visible') {
+                    messageSound.play().catch(e => console.warn("Audio play failed.", e));
+                }
+            }
+        });
         const messages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderMessages(messages);
     });
-
-    // Re-render friends list to show active state
-    loadFriends();
 };
 
 const sendMessage = async (messageData) => {
     if (activeView === 'servers' && activeServerId && activeChannelId) {
-        await db.collection('servers').doc(activeServerId).collection('channels').doc(activeChannelId).collection('messages').add(messageData);
+        const channelRef = db.collection('servers').doc(activeServerId).collection('channels').doc(activeChannelId);
+        const messagesRef = channelRef.collection('messages');
+        const batch = db.batch();
+        batch.add(messagesRef, messageData);
+        batch.update(channelRef, { lastMessage: {
+            text: messageData.text?.substring(0, 40) || 'File sent',
+            timestamp: messageData.timestamp
+        }});
+        await batch.commit();
+
     } else if (activeView === 'home' && activeChannelId) {
         await db.collection('dms').doc(activeChannelId).collection('messages').add(messageData);
     }
@@ -1698,6 +1786,28 @@ const handleAddFriend = async (e) => {
     }
 };
 
+const handleRemoveFriend = async (friendId, friendName) => {
+    if (confirm(`Are you sure you want to remove ${friendName} from your friends?`)) {
+        try {
+            const currentUserRef = db.collection('users').doc(currentUser.uid);
+            const friendRef = db.collection('users').doc(friendId);
+
+            const batch = db.batch();
+            batch.update(currentUserRef, { friends: firebase.firestore.FieldValue.arrayRemove(friendId) });
+            batch.update(friendRef, { friends: firebase.firestore.FieldValue.arrayRemove(currentUser.uid) });
+            await batch.commit();
+
+            if (activeChannelId === getDmChannelId(friendId)) {
+                selectHome();
+            }
+
+        } catch (error) {
+            console.error("Error removing friend:", error);
+            alert("Failed to remove friend. Please try again.");
+        }
+    }
+};
+
 const handleUpdateProfile = async (e) => {
     e.preventDefault();
     const profileUsernameInput = document.getElementById('profile-username-input');
@@ -2031,6 +2141,9 @@ const handleIncomingCall = async (callData) => {
         return;
     }
     activeCallData = callData;
+    if (document.visibilityState === 'visible') {
+        callSound.play().catch(e => console.warn("Audio play failed.", e));
+    }
     const callerDoc = await db.collection('users').doc(callData.callerId).get();
     const caller = callerDoc.data();
     showCallUI('incoming', caller);
@@ -2124,6 +2237,8 @@ const startCall = async (friend) => {
 
 const answerCall = async () => {
     if (!activeCallData) return;
+    callSound.pause();
+    callSound.currentTime = 0;
     try {
         localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
         document.getElementById('local-video').srcObject = localStream;
@@ -2244,6 +2359,8 @@ const showCallUI = (type, peer) => {
 };
 
 const hangUp = async () => {
+    callSound.pause();
+    callSound.currentTime = 0;
     if (peerConnection) {
         peerConnection.close();
         peerConnection = null;
@@ -2395,7 +2512,7 @@ document.getElementById('message-input').addEventListener('input', (e) => {
     }
 });
 
-// Home View Tabs
+// Home View Tabs & Friends List Actions
 document.getElementById('home-nav').addEventListener('click', (e) => {
     if (e.target.matches('.home-nav-button')) {
         const tab = e.target.dataset.tab;
@@ -2412,6 +2529,25 @@ document.getElementById('home-nav').addEventListener('click', (e) => {
         });
     }
 });
+document.getElementById('friend-list').addEventListener('click', async (e) => {
+    const friendItem = e.target.closest('[data-friend-id]');
+    if (!friendItem) return;
+
+    e.stopPropagation();
+
+    const friendId = friendItem.dataset.friendId;
+    const friendName = friendItem.dataset.friendName;
+
+    if (e.target.closest('.remove-friend-btn')) {
+        handleRemoveFriend(friendId, friendName);
+    } else if (e.target.closest('.dm-button')) {
+        const friendDoc = await db.collection('users').doc(friendId).get();
+        if (friendDoc.exists) {
+            selectDmChannel({ id: friendDoc.id, ...friendDoc.data() });
+        }
+    }
+});
+
 
 // File Upload
 document.getElementById('attach-file-button').addEventListener('click', () => document.getElementById('file-upload-input').click());
