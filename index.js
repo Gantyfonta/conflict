@@ -337,6 +337,8 @@ const CAM_ON_SVG = `<svg class="w-6 h-6 text-white" fill="none" stroke="currentC
 const CAM_OFF_SVG = `<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3l18 18"></path></svg>`;
 const HANGUP_SVG = `<svg class="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17.218,2.282a1.042,1.042,0,0,0-1.474,0l-1.7,1.7-2.31-2.31a3.03,3.03,0,0,0-4.286,0L2.282,6.839a3.03,3.03,0,0,0,0,4.286l3.3,3.3-2.24,2.24a1.042,1.042,0,0,0,0,1.474l3.78,3.78a1.042,1.042,0,0,0,1.474,0l2.24-2.24,3.3,3.3a3.03,3.03,0,0,0,4.286,0l4.834-4.834a3.03,3.03,0,0,0,0-4.286L17.218,2.282Z"></path></svg>`;
 const SCREEN_SHARE_ON_SVG = `<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>`;
+const COLLAPSE_SVG = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"></path></svg><span class="absolute right-full top-1/2 -translate-y-1/2 mr-2 p-2 text-xs bg-gray-900 text-white rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10 pointer-events-none">Collapse</span>`;
+const EXPAND_SVG = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path></svg><span class="absolute left-full top-1/2 -translate-y-1/2 ml-2 p-2 text-xs bg-gray-900 text-white rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10 pointer-events-none">Expand</span>`;
 
 
 // =================================================================================
@@ -2195,6 +2197,7 @@ const toggleScreenShare = async () => {
     }
 
     const screenShareButton = document.getElementById('toggle-screen-share-button');
+    const remoteVideo = document.getElementById('remote-video');
 
     if (isScreenSharing) {
         // Stop sharing and revert to camera
@@ -2214,6 +2217,10 @@ const toggleScreenShare = async () => {
             document.getElementById('local-video').srcObject = localStream;
 
             isScreenSharing = false;
+            if(remoteVideo) {
+                remoteVideo.classList.remove('object-contain');
+                remoteVideo.classList.add('object-cover');
+            }
             screenShareButton.classList.remove('bg-green-500', 'hover:bg-green-600');
             screenShareButton.classList.add('bg-gray-600/80', 'hover:bg-gray-500/80');
             screenShareButton.innerHTML = SCREEN_SHARE_ON_SVG;
@@ -2232,6 +2239,10 @@ const toggleScreenShare = async () => {
             document.getElementById('local-video').srcObject = screenStream;
             isScreenSharing = true;
 
+            if(remoteVideo) {
+                remoteVideo.classList.add('object-contain');
+                remoteVideo.classList.remove('object-cover');
+            }
             screenShareButton.classList.add('bg-green-500', 'hover:bg-green-600');
             screenShareButton.classList.remove('bg-gray-600/80', 'hover:bg-gray-500/80');
             screenShareButton.setAttribute('aria-label', 'Stop sharing screen');
@@ -2510,7 +2521,11 @@ const hangUp = async () => {
     const remoteVideo = document.getElementById('remote-video');
     const localVideo = document.getElementById('local-video');
     if (videoCallView) videoCallView.classList.add('hidden');
-    if (remoteVideo) remoteVideo.srcObject = null;
+    if (remoteVideo) {
+        remoteVideo.srcObject = null;
+        remoteVideo.classList.remove('object-contain');
+        remoteVideo.classList.add('object-cover');
+    }
     if (localVideo) localVideo.srcObject = null;
     
     // Reset local video position
@@ -2574,6 +2589,38 @@ const renderCommandSuggestions = (commands) => {
 
     container.classList.remove('hidden');
 };
+
+const setHomePanelState = (isCollapsed) => {
+    const homeView = document.getElementById('home-view');
+    const homeViewHeader = homeView.querySelector('header');
+    const homeViewTitle = document.getElementById('home-view-title');
+    const homeViewContent = document.getElementById('home-view-content');
+    const toggleButton = document.getElementById('toggle-home-panel-button');
+
+    if (isCollapsed) {
+        homeView.classList.remove('w-64');
+        homeView.classList.add('w-16');
+        homeViewTitle.classList.add('hidden');
+        homeViewContent.classList.add('hidden');
+        homeViewHeader.classList.add('justify-center');
+        toggleButton.innerHTML = EXPAND_SVG;
+    } else {
+        homeView.classList.add('w-64');
+        homeView.classList.remove('w-16');
+        homeViewTitle.classList.remove('hidden');
+        homeViewContent.classList.remove('hidden');
+        homeViewHeader.classList.remove('justify-center');
+        toggleButton.innerHTML = COLLAPSE_SVG;
+    }
+    localStorage.setItem('homePanelCollapsed', isCollapsed);
+};
+
+const toggleHomePanel = () => {
+    const homeView = document.getElementById('home-view');
+    const isCurrentlyCollapsed = homeView.classList.contains('w-16');
+    setHomePanelState(!isCurrentlyCollapsed);
+};
+
 
 // =================================================================================
 // Event Listeners
@@ -2654,6 +2701,7 @@ document.getElementById('message-input').addEventListener('input', (e) => {
 });
 
 // Home View Tabs & Friends List Actions
+document.getElementById('toggle-home-panel-button').addEventListener('click', toggleHomePanel);
 document.getElementById('home-nav').addEventListener('click', (e) => {
     if (e.target.matches('.home-nav-button')) {
         const tab = e.target.dataset.tab;
@@ -3042,3 +3090,7 @@ emojiButton.addEventListener('click', (e) => {
     e.stopPropagation();
     emojiPicker.classList.toggle('hidden');
 });
+
+// Initialize Home Panel State
+const isCollapsed = localStorage.getItem('homePanelCollapsed') === 'true';
+setHomePanelState(isCollapsed);
