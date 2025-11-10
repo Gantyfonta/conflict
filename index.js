@@ -368,7 +368,7 @@ let invitationsUnsubscribe = () => {};
 
 // Audio Notifications
 const messageSound = new Audio('https://cdn.pixabay.com/download/audio/2021/08/04/audio_bb630cc098.mp3');
-const callSound = new Audio('https://cdn.pixabay.com/download/audio/2022/10/14/audio_a7587d5502.mp3');
+const callSound = new Audio('https://cdn.pixabay.com/audio/2022/04/24/audio_51c62f22b7.mp3');
 callSound.loop = true;
 
 // WebRTC State
@@ -2286,7 +2286,7 @@ const startCall = async (friend) => {
 
     callRef.collection('calleeCandidates').onSnapshot(snapshot => {
         snapshot.docChanges().forEach(change => {
-            if (change.type === 'added') {
+            if (change.type === 'added' && peerConnection) {
                 const candidate = new RTCIceCandidate(change.doc.data());
                 peerConnection.addIceCandidate(candidate);
             }
@@ -2347,7 +2347,7 @@ const answerCall = async () => {
 
     callRef.collection('callerCandidates').onSnapshot(snapshot => {
         snapshot.docChanges().forEach(change => {
-            if (change.type === 'added') {
+            if (change.type === 'added' && peerConnection) {
                 const candidate = new RTCIceCandidate(change.doc.data());
                 peerConnection.addIceCandidate(candidate);
             }
